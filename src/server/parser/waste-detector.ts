@@ -1,6 +1,8 @@
 import path from 'path';
 import { ParsedFileResult } from './repo-parser.js';
-import { WasteMetrics, DuplicateCodeItem } from '../../shared/types.js';
+import { WasteMetrics, DuplicateCodeItem, UnusedExportDetail } from '../../shared/types.js';
+import type { FileEdge } from '../analysis/dependency-graph.js';
+import { normalizePath } from '../analysis/glob.js';
 
 export interface ExportedSymbolDetail {
   name: string;
@@ -8,6 +10,29 @@ export interface ExportedSymbolDetail {
   file: string;
   line: number;
   loc: number;
+  /** For unused exports: still referenced inside its own file, or dead everywhere. */
+  usage?: 'local_only' | 'dead';
+}
+
+export interface WasteAnalysisOptions {
+  /** Resolved imports (tsconfig aliases, .js -> .ts, index files) used for orphan detection. */
+  fileEdges?: FileEdge[];
+}
+
+function toUnusedDetail(e: ExportedSymbolDetail): UnusedExportDetail {
+  const usage = e.usage ?? 'dead';
+  return {
+    name: e.name,
+    file: e.file,
+    line: e.line,
+    kind: e.kind,
+    usage,
+    severity: usage === 'dead' ? 'medium' : 'low',
+    message:
+      usage === 'dead'
+        ? `symbol never referenced anywhere (dead): ${e.name} at ${e.file}:${e.line}`
+        : `export not needed (used only in file): ${e.name} at ${e.file}:${e.line}`,
+  };
 }
 
 export interface WasteAnalysisResult {
@@ -64,9 +89,13 @@ export class WasteDetector {
   public static analyzeRepository(
     sourceFiles: ParsedFileResult[],
     testFiles: ParsedFileResult[],
-    entryFiles: string[] = []
+    entryFiles: string[] = [],
+    options: WasteAnalysisOptions = {}
   ): WasteAnalysisResult {
     const allFiles = [...sourceFiles, ...testFiles];
+    const entrySet = new Set(entryFiles.map(normalizePath));
+    const localRefs = new Map<string, Record<string, number>>();
+    for (const f of sourceFiles) localRefs.set(f.filePath, f.localReferenceCounts || {});
     const fileWaste = new Map<string, WasteMetrics>();
 
     // Pre-index source files for O(1) import resolution
@@ -141,12 +170,18 @@ export class WasteDetector {
       }
     }
 
+    for (const edge of options.fileEdges || []) {
+      if (!incomingFileImports.has(edge.to)) incomingFileImports.set(edge.to, new Set());
+      incomingFileImports.get(edge.to)!.add(edge.from);
+    }
+
     // 3. Classify Unused Exports & Test Zombies
     const allUnusedExports: ExportedSymbolDetail[] = [];
     const allTestZombies: ExportedSymbolDetail[] = [];
 
     for (const exp of allExports) {
-      const isEntry = entryFiles.some((ef) => exp.file.includes(ef)) ||
+      const isEntry = entrySet.has(normalizePath(exp.file)) ||
+        entryFiles.some((ef) => exp.file.includes(ef)) ||
         this.ENTRY_PATTERNS.some((pat) => pat.test(exp.file));
 
       if (isEntry) continue; // Entrypoints always keep their exports
@@ -158,7 +193,8 @@ export class WasteDetector {
       const hasTestCaller = testUsers && testUsers.size > 0;
 
       if (!hasProdCaller && !hasTestCaller) {
-        allUnusedExports.push(exp);
+        const refs = localRefs.get(exp.file)?.[exp.name] || 0;
+        allUnusedExports.push({ ...exp, usage: refs > 0 ? 'local_only' : 'dead' });
       } else if (!hasProdCaller && hasTestCaller) {
         allTestZombies.push(exp);
       }
@@ -201,12 +237,13 @@ export class WasteDetector {
     // 5. Detect Orphan Files
     const allOrphanFiles: string[] = [];
     for (const file of sourceFiles) {
-      const isEntry = entryFiles.some((ef) => file.filePath.includes(ef)) ||
+      const isEntry = entrySet.has(normalizePath(file.filePath)) ||
+        entryFiles.some((ef) => file.filePath.includes(ef)) ||
         this.ENTRY_PATTERNS.some((pat) => pat.test(file.filePath));
 
       if (isEntry) continue;
 
-      const importers = incomingFileImports.get(file.filePath);
+      const importers = incomingFileImports.get(file.filePath) || incomingFileImports.get(normalizePath(file.filePath));
       if (!importers || importers.size === 0) {
         allOrphanFiles.push(file.filePath);
       }
@@ -214,9 +251,8 @@ export class WasteDetector {
 
     // 6. Build File-Level Waste Metrics
     for (const file of sourceFiles) {
-      const fileUnused = allUnusedExports
-        .filter((e) => e.file === file.filePath)
-        .map((e) => e.name);
+      const fileUnusedDetails = allUnusedExports.filter((e) => e.file === file.filePath);
+      const fileUnused = fileUnusedDetails.map((e) => e.name);
 
       const fileZombies = allTestZombies
         .filter((e) => e.file === file.filePath)
@@ -225,8 +261,8 @@ export class WasteDetector {
       const fileDups = allDuplicates.filter((d) => d.sourceFile === file.filePath);
       const isOrphan = allOrphanFiles.includes(file.filePath);
 
-      const deadCodeLines = allUnusedExports
-        .filter((e) => e.file === file.filePath)
+      const deadCodeLines = fileUnusedDetails
+        .filter((e) => e.usage !== 'local_only')
         .reduce((sum, e) => sum + e.loc, 0);
 
       const penalties = fileUnused.length * 15 + fileDups.length * 20 + (isOrphan ? 30 : 0);
@@ -241,6 +277,7 @@ export class WasteDetector {
 
       fileWaste.set(file.filePath, {
         unusedExports: fileUnused,
+        unusedExportDetails: fileUnusedDetails.map(toUnusedDetail),
         deadCodeLines,
         duplicateFunctions: fileDups,
         orphanFiles: isOrphan ? [file.filePath] : [],
@@ -251,7 +288,7 @@ export class WasteDetector {
     }
 
     // 7. Overall Repo Waste Metrics
-    const totalDeadLines = allUnusedExports.reduce((acc, e) => acc + e.loc, 0);
+    const totalDeadLines = allUnusedExports.filter((e) => e.usage !== 'local_only').reduce((acc, e) => acc + e.loc, 0);
     const repoPenalties = allUnusedExports.length * 5 + allDuplicates.length * 10 + allOrphanFiles.length * 15;
     const repoCleanliness = Math.max(0, Math.min(100, 100 - repoPenalties));
 
@@ -264,6 +301,7 @@ export class WasteDetector {
 
     const repoWaste: WasteMetrics = {
       unusedExports: allUnusedExports.map((e) => `${path.basename(e.file)}:${e.name}`),
+      unusedExportDetails: allUnusedExports.map(toUnusedDetail),
       deadCodeLines: totalDeadLines,
       duplicateFunctions: allDuplicates,
       orphanFiles: allOrphanFiles,
@@ -290,6 +328,7 @@ export class WasteDetector {
     fileWasteMap: Map<string, WasteMetrics>
   ): WasteMetrics {
     const unusedExports: string[] = [];
+    const unusedExportDetails: UnusedExportDetail[] = [];
     let deadCodeLines = 0;
     const duplicateFunctions: DuplicateCodeItem[] = [];
     const orphanFiles: string[] = [];
@@ -300,6 +339,7 @@ export class WasteDetector {
       for (const [key, metrics] of fileWasteMap.entries()) {
         if (key.includes(filePath) || filePath.includes(key)) {
           unusedExports.push(...metrics.unusedExports.map((u) => `${path.basename(key)}:${u}`));
+          unusedExportDetails.push(...(metrics.unusedExportDetails || []));
           deadCodeLines += metrics.deadCodeLines;
           duplicateFunctions.push(...metrics.duplicateFunctions);
           orphanFiles.push(...metrics.orphanFiles);
@@ -320,6 +360,7 @@ export class WasteDetector {
 
     return {
       unusedExports,
+      unusedExportDetails,
       deadCodeLines,
       duplicateFunctions,
       orphanFiles,

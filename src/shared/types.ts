@@ -37,6 +37,10 @@ export interface GapItem {
   severity: 'low' | 'medium' | 'high' | 'critical';
   resolved: boolean;
   resolutionNote?: string;
+  /** Rule that produced the gap (e.g. 'circular_dependency', 'type_only_boundary'). */
+  kind?: string;
+  /** Imports behind the gap, as "file:line → target". */
+  evidence?: string[];
 }
 
 export type ComponentGap = GapItem;
@@ -85,8 +89,25 @@ export interface DuplicateCodeItem {
   reason: string;
 }
 
+/**
+ * An export nobody imports. `local_only`: still used inside its own file, so
+ * only the `export` keyword is unnecessary (low). `dead`: never referenced
+ * anywhere, so the code itself can go (medium).
+ */
+export interface UnusedExportDetail {
+  name: string;
+  file: string;
+  line: number;
+  kind: 'function' | 'class' | 'interface' | 'variable' | 'type';
+  usage: 'local_only' | 'dead';
+  severity: 'low' | 'medium';
+  message: string;
+}
+
 export interface WasteMetrics {
   unusedExports: string[];
+  /** Per-export detail with file:line and local-only vs dead classification. */
+  unusedExportDetails?: UnusedExportDetail[];
   deadCodeLines: number;
   duplicateFunctions: DuplicateCodeItem[];
   orphanFiles: string[];
@@ -102,10 +123,18 @@ export interface FigmaMappingInfo {
   exportName?: string;
 }
 
+/**
+ * Why a component sits in its layer. Layer-inversion checks only trust
+ * `config`, `keyword` and `shared`; the rest are fallback guesses.
+ */
+export type LayerSource = 'config' | 'keyword' | 'shared' | 'runtime' | 'tooling' | 'default';
+
 export interface ArchitectureComponent {
   id: string;
   name: string;
   layerId: string;
+  /** How the layer was chosen (auto-clustered components only). */
+  layerSource?: LayerSource;
   description: string;
   color: string; // Accent color token or hex (e.g., 'cyan', 'indigo', 'emerald', 'amber', 'rose', 'purple')
   priority: number; // 1 = highest priority / build first
