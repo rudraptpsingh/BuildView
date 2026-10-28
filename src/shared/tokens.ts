@@ -129,9 +129,20 @@ export const WASTE_TOKENS: Record<'prune' | 'investigate' | 'clean', WasteToken>
  */
 export const LAYER_ACCENTS: Record<string, { bar: string; color: string; border: string }> = {
   layer_0: { bar: '#32ade6', color: 'blue', border: '#32ade648' },
-  layer_1: { bar: '#30d158', color: 'green', border: '#30d15848' },
-  layer_2: { bar: '#ff9f0a', color: 'amber', border: '#ff9f0a48' },
-  layer_3: { bar: '#a259ff', color: 'purple', border: '#a259ff48' },
+  layer_1: { bar: '#06b6d4', color: 'cyan', border: '#06b6d448' },
+  layer_2: { bar: '#ffd60a', color: 'amber', border: '#ffd60a48' },
+  layer_3: { bar: '#ff453a', color: 'rose', border: '#ff453a48' },
+  layer_4: { bar: '#10b981', color: 'emerald', border: '#10b98148' },
+  layer_0_native_storage: { bar: '#32ade6', color: 'blue', border: '#32ade648' },
+  layer_1_ai_ml: { bar: '#06b6d4', color: 'cyan', border: '#06b6d448' },
+  layer_2_ipc_desktop: { bar: '#ffd60a', color: 'amber', border: '#ffd60a48' },
+  layer_3_studio_ui: { bar: '#ff453a', color: 'rose', border: '#ff453a48' },
+  layer_4_tests: { bar: '#10b981', color: 'emerald', border: '#10b98148' },
+  layer_foundation: { bar: '#6366f1', color: 'indigo', border: '#6366f148' },
+  layer_domain: { bar: '#06b6d4', color: 'cyan', border: '#06b6d448' },
+  layer_state_ipc: { bar: '#ffd60a', color: 'amber', border: '#ffd60a48' },
+  layer_presentation: { bar: '#f43f5e', color: 'rose', border: '#f43f5e48' },
+  layer_verification: { bar: '#10b981', color: 'emerald', border: '#10b98148' },
   default: { bar: '#636366', color: 'neutral', border: '#3f4047' },
 };
 

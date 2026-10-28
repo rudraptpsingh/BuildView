@@ -53,6 +53,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'in_progress' | 'gap_detected' | 'prune'>('all');
   const [isCompact, setIsCompact] = useState<boolean>(false);
   const [edgeMode, setEdgeMode] = useState<'focused' | 'all'>('focused');
+  const [showTestLayer, setShowTestLayer] = useState<boolean>(true);
 
   // Canvas Pan & Zoom State
   const [zoom, setZoom] = useState<number>(1.0);
@@ -73,15 +74,28 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
     height: 900,
   });
 
-  // Sort layers foundation-up (order 0, 1, 2, 3)
+  // Sort layers foundation-up (order 0, 1, 2, 3, 4)
   const sortedLayers = useMemo(
     () => [...project.layers].sort((a, b) => a.order - b.order),
     [project.layers]
   );
 
-  // Filter components according to search and status filter
+  // Filtered layers based on test toggle
+  const visibleLayers = useMemo(() => {
+    return sortedLayers.filter((l) => {
+      const isTest = l.id === 'layer_4_tests' || l.id === 'layer_verification';
+      if (!showTestLayer && isTest) return false;
+      return true;
+    });
+  }, [sortedLayers, showTestLayer]);
+
+  // Filter components according to search, layer, status, and test toggle
   const filteredComponents = useMemo(() => {
     return project.components.filter((comp) => {
+      // Test layer toggle
+      const isTest = comp.layerId === 'layer_4_tests' || comp.layerId === 'layer_verification';
+      if (!showTestLayer && isTest) return false;
+
       // Layer filter
       if (selectedLayerFilter !== 'all' && comp.layerId !== selectedLayerFilter) {
         return false;
@@ -103,7 +117,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
 
       return true;
     });
-  }, [project.components, searchQuery, selectedLayerFilter, statusFilter]);
+  }, [project.components, searchQuery, selectedLayerFilter, statusFilter, showTestLayer]);
 
   // Active focused node (hovered takes precedence, then selected)
   const activeFocusId = hoveredNodeId || selectedComponentId;
@@ -244,13 +258,22 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
   const getLayerIcon = (layerId: string) => {
     switch (layerId) {
       case 'layer_0_native_storage':
-        return <Database className="w-3.5 h-3.5" />;
+      case 'layer_foundation':
+        return <Database className="w-3.5 h-3.5 text-blue-400" />;
       case 'layer_1_ai_ml':
-        return <Cpu className="w-3.5 h-3.5" />;
+      case 'layer_domain':
+        return <Cpu className="w-3.5 h-3.5 text-cyan-400" />;
       case 'layer_2_ipc_desktop':
-        return <Terminal className="w-3.5 h-3.5" />;
+      case 'layer_state_ipc':
+        return <Terminal className="w-3.5 h-3.5 text-amber-400" />;
+      case 'layer_3_studio_ui':
+      case 'layer_presentation':
+        return <Layout className="w-3.5 h-3.5 text-rose-400" />;
+      case 'layer_4_tests':
+      case 'layer_verification':
+        return <TestTube className="w-3.5 h-3.5 text-emerald-400" />;
       default:
-        return <Layout className="w-3.5 h-3.5" />;
+        return <Layers className="w-3.5 h-3.5" />;
     }
   };
 
@@ -278,7 +301,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
             onChange={(e) => setSelectedLayerFilter(e.target.value)}
             className="px-2.5 py-1 text-xs font-mono rounded neu-well bg-transparent text-[var(--text-primary)] border-none focus:outline-none"
           >
-            <option value="all">ALL LAYERS (4)</option>
+            <option value="all">ALL LAYERS ({project.layers.length})</option>
             {project.layers.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name.replace(/^Layer \d+:\s*/, '')}
@@ -315,8 +338,22 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
           </div>
         </div>
 
-        {/* Right: Edge Mode & Zoom Controls */}
+        {/* Right: Edge Mode, Test Toggle & Zoom Controls */}
         <div className="flex items-center space-x-2 font-mono text-xs">
+          {/* Test Layer Toggle */}
+          <button
+            onClick={() => setShowTestLayer(!showTestLayer)}
+            className={`action-btn text-[10px] font-mono flex items-center space-x-1.5 px-2.5 py-1 transition-all ${
+              showTestLayer
+                ? 'text-emerald-400 border border-emerald-500/40 bg-emerald-500/10'
+                : 'text-[var(--text-tertiary)]'
+            }`}
+            title="Toggle Verification & Test Harness Layer (Layer 4)"
+          >
+            <TestTube className="w-3 h-3" />
+            <span>TESTS {showTestLayer ? 'ON' : 'OFF'}</span>
+          </button>
+
           {/* Edge Mode: Focused vs All Edges */}
           <div className="segmented-tabs text-[10px]">
             <button
@@ -516,9 +553,15 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
             })}
           </svg>
 
-          {/* 4 Dedicated Layer Track Columns */}
-          <div className="relative z-10 grid grid-cols-4 gap-8 min-w-[1300px]">
-            {sortedLayers.map((layer) => {
+          {/* Dedicated Layer Track Columns (Dynamic 4 or 5 columns) */}
+          <div
+            className="relative z-10 grid gap-6"
+            style={{
+              gridTemplateColumns: `repeat(${visibleLayers.length}, minmax(280px, 1fr))`,
+              minWidth: `${Math.max(1200, visibleLayers.length * 300)}px`,
+            }}
+          >
+            {visibleLayers.map((layer) => {
               const compsInLayer = filteredComponents.filter((c) => c.layerId === layer.id);
               const accent = LAYER_ACCENTS[layer.id] || LAYER_ACCENTS.default;
 
@@ -530,10 +573,9 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
                   {/* Minimal Column Header */}
                   <div className="flex items-center justify-between pb-3 hairline-b">
                     <div className="flex items-center space-x-2">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full shadow-xs"
-                        style={{ backgroundColor: layer.color || accent.bar }}
-                      />
+                      <div className="p-1 rounded-md bg-[var(--surface-control)]">
+                        {getLayerIcon(layer.id)}
+                      </div>
                       <div>
                         <h3 className="text-xs font-bold font-mono tracking-tight text-[var(--text-primary)] uppercase">
                           {layer.name.replace(/^Layer \d+:\s*/, '')}
@@ -555,6 +597,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
                       const effectiveStatus = activeGaps.length > 0 ? 'gap_detected' : comp.status;
                       const isSelected = selectedComponentId === comp.id;
                       const isHovered = hoveredNodeId === comp.id;
+                      const isTestHarness = comp.layerId === 'layer_4_tests' || comp.layerId === 'layer_verification';
 
                       let isCaller = false;
                       let isCallee = false;
@@ -606,9 +649,13 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
                               border: `2.5px solid ${circleBorder}`,
                             }}
                           >
-                            <span className="text-[10px] font-bold text-[var(--text-primary)]">
-                              P{comp.priority}
-                            </span>
+                            {isTestHarness ? (
+                              <TestTube className="w-4 h-4 text-emerald-400" />
+                            ) : (
+                              <span className="text-[10px] font-bold text-[var(--text-primary)]">
+                                P{comp.priority}
+                              </span>
+                            )}
 
                             {/* Gap Warning Dot (Top-Right) */}
                             {effectiveStatus === 'gap_detected' && (

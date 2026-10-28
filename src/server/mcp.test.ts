@@ -85,4 +85,61 @@ describe('BuildView MCP Server Protocol Suite', () => {
     expect(targetComp).toBeDefined();
     expect(targetComp?.anatomy.functions[0].name).toBe('spawn');
   });
+
+  it('generates actionable TDD prompt for coding agents', async () => {
+    store.initProject('TDD Project', 'Architecture mapping', [
+      { id: 'layer_domain', name: 'Domain', order: 1, description: 'Core domain services' },
+      { id: 'layer_verification', name: 'Verification & Test Harness', order: 4, description: 'Tests' },
+    ]);
+
+    store.defineComponent({
+      id: 'comp_auth',
+      name: 'Authentication Service',
+      layerId: 'layer_domain',
+      description: 'JWT validation and token refresh',
+      color: 'blue',
+      priority: 1,
+      status: 'planned',
+      progress: 0,
+      anatomy: {
+        members: [],
+        functions: [{ name: 'verifyToken', signature: '(token: string): boolean', returnType: 'boolean' }],
+        state: [],
+        callers: ['api_gateway'],
+        callees: ['crypto_vault'],
+      },
+      files: [{ path: 'src/auth.ts', status: 'planned' }],
+      gaps: [],
+    });
+
+    store.defineComponent({
+      id: 'comp_test_auth',
+      name: 'Auth Invariant Harness',
+      layerId: 'layer_verification',
+      description: 'Test suite for Auth',
+      color: 'emerald',
+      priority: 2,
+      status: 'completed',
+      progress: 100,
+      anatomy: {
+        members: [],
+        functions: [],
+        state: [],
+        callers: ['CI/CD'],
+        callees: ['comp_auth'],
+      },
+      files: [{ path: 'tests/auth.test.ts', status: 'created' }],
+      gaps: [],
+    });
+
+    const project = store.getProject();
+    const comp = project.components.find((c) => c.id === 'comp_auth');
+    expect(comp).toBeDefined();
+
+    const verifying = project.components.filter(
+      (c) => c.layerId === 'layer_verification' && c.anatomy.callees.includes('comp_auth')
+    );
+    expect(verifying).toHaveLength(1);
+    expect(verifying[0].id).toBe('comp_test_auth');
+  });
 });

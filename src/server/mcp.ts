@@ -442,5 +442,101 @@ export function createBuildViewMcpServer(store: BuildViewStore) {
     }
   );
 
+  // Tool 10: Generate Executable Test-Driven Development (TDD) Prompt for Coding Agents
+  server.tool(
+    'buildview_get_tdd_prompt',
+    'Generate a rigorous, prompt-ready TDD specification for a component, linking its executable verification test harness, invariants, functions, and waste pruning targets',
+    {
+      componentId: z.string().describe('Target component ID to generate a TDD implementation prompt for'),
+    },
+    async (args) => {
+      const project = store.getProject();
+      const comp = project.components.find((c) => c.id === args.componentId);
+      if (!comp) {
+        return {
+          content: [{ type: 'text', text: `Error: Component "${args.componentId}" not found in project "${project.name}".` }],
+        };
+      }
+
+      const layer = project.layers.find((l) => l.id === comp.layerId);
+      const verifyingHarnesses = project.components.filter(
+        (c) =>
+          (c.layerId === 'layer_4_tests' || c.layerId === 'layer_verification') &&
+          c.anatomy.callees.includes(comp.id)
+      );
+
+      const tddPrompt = [
+        `# AGENT TDD SPECIFICATION: ${comp.name} (\`${comp.id}\`)`,
+        `**Layer:** ${layer?.name || comp.layerId} | **Priority:** P${comp.priority} | **Current Status:** ${comp.status.toUpperCase()}`,
+        `**Architectural Responsibility:** ${comp.description}`,
+        '',
+        '---',
+        '## 🧪 PHASE 1: RED (Test Contract Specification & Failing Assertions)',
+        `Before writing any production code, establish the automated test suite enforcing ${comp.name}'s contracts.`,
+        '',
+        verifyingHarnesses.length > 0
+          ? `**Linked Verification Harness(es):**\n` +
+            verifyingHarnesses.map((vh) => `- \`${vh.name}\` (\`${vh.id}\`): ${vh.files.map((f) => f.path).join(', ')}`).join('\n')
+          : `**Target Test File:** \`${comp.files[0] ? comp.files[0].path.replace(/\.(ts|tsx|js|jsx)$/, '.test.$1') : `tests/${comp.id}.test.ts`}\``,
+        '',
+        '### Contract Assertions to Verify:',
+        ...(comp.anatomy.functions.length > 0
+          ? comp.anatomy.functions.map(
+              (f) =>
+                `- [ ] \`${f.name}${f.signature}\`: Must return \`${f.returnType || 'expected result'}\`. Verify edge cases, async behavior (${!!f.isAsync}), and invalid parameter errors.`
+            )
+          : ['- [ ] Establish initial unit specs enforcing module initialization and exported interface.']),
+        '',
+        '### Caller / Callee Boundaries:',
+        `- **Expected Callers:** ${comp.anatomy.callers.join(', ') || 'Root/Interface entrypoint'}`,
+        `- **Allowed Callee Invariants (Do not import outside these):** ${comp.anatomy.callees.join(', ') || 'Self-contained leaf module'}`,
+        '',
+        '---',
+        '## ⚡ PHASE 2: GREEN (Minimal Implementation Satisfying Contract)',
+        'Implement the minimum code necessary in the target implementation files to make all test assertions pass.',
+        '',
+        '### Implementation Files:',
+        ...comp.files.map((f) => `- \`${f.path}\` (${f.status}) ${f.description ? `— ${f.description}` : ''}`),
+        '',
+        '### Public Anatomy to Expose:',
+        ...(comp.anatomy.functions.map(
+          (f) => `- \`export ${f.isAsync ? 'async ' : ''}function ${f.name}${f.signature}: ${f.returnType || 'any'}\``
+        )),
+        ...(comp.anatomy.members.map((m) => `- \`[${m.access || 'public'}] ${m.name}: ${m.type}\``)),
+        '',
+        '---',
+        '## 🧹 PHASE 3: REFACTOR & PRUNE (AST Waste Elimination)',
+        `**Cleanliness Score:** ${comp.wasteMetrics?.cleanlinessScore ?? 100}%`,
+        ...(comp.wasteMetrics?.unusedExports && comp.wasteMetrics.unusedExports.length > 0
+          ? [
+              '### Dead Exports to Remove / Unexport:',
+              ...comp.wasteMetrics.unusedExports.map((u) => `- [PRUNE] \`${u}\``),
+            ]
+          : ['- No unused exports detected.']),
+        ...(comp.wasteMetrics?.duplicateFunctions && comp.wasteMetrics.duplicateFunctions.length > 0
+          ? [
+              '### Duplicate Code to Consolidate:',
+              ...comp.wasteMetrics.duplicateFunctions.map((d) => `- [CONSOLIDATE] \`${d.name}()\` with \`${d.duplicateOfFile}\``),
+            ]
+          : []),
+        '',
+        '---',
+        '## 🏁 PHASE 4: VERIFY & BROADCAST TELEMETRY',
+        '1. Run the test command: `npx vitest run` or project test suite.',
+        `2. Call MCP tool \`buildview_record_test_results\` with componentId: "${comp.id}".`,
+        `3. Call MCP tool \`buildview_update_component_status\` to mark status: "completed" and progress: 100.`,
+      ].join('\n');
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: tddPrompt,
+          },
+        ],
+      };
+    }
+  );
+
   return server;
 }
