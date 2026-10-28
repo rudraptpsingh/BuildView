@@ -27,13 +27,22 @@ BuildView connects coding agents (Claude, Antigravity, Cursor, Windsurf) via the
    - Hover over any component card to preview created and modified files, change counts (`+142`), and commit notes.
    - Click to copy file paths directly to clipboard.
 
-5. **Architectural Gap Auditor**
+5. **Architectural Gap Auditor & Prune Table**
+   - Interactive **Gaps & Prune Inspection Table** with search and filters (`ALL`, `GAPS`, `PRUNE`, `DUPLICATES`, `CLEAN`).
    - Coding agents and developers can flag architectural gaps, missing error handling, and unhandled contracts via `buildview_report_gap`.
-   - Visualizer escalates the component status to amber alert, prioritizing gap resolution before proceeding to subsequent layers.
+   - Visualizer escalates component status to amber alert, prioritizing gap resolution before proceeding to subsequent layers.
 
-6. **Self-Building Dogfood Architecture**
-   - BuildView models its own architecture inside its own store and MCP tools.
-   - Toggle between **BuildView (Self-Building Meta Architecture)** and the **DevPulse CLI Pilot** directly in the UI.
+6. **AST Code Waste & Dead Code Detection**
+   - Scans full repository AST for unused exports, $\ge 90\%$ duplicate function implementations, test zombies, and orphan files.
+   - Computes component Cleanliness Scores and provides pruning guidance for coding agents.
+
+7. **Minimalist Circle & Directed Edge DAG Graph**
+   - High-density DAG architecture graph with circular nodes, directional Bezier edges, and layer swimlanes.
+   - **Focused Inspection Mode**: Spotlights incoming callers (Emerald) and outgoing callees (Blue) on hover/selection while gracefully dimming unrelated nodes.
+   - Docked inspector card with 1-click drawer deep-linking.
+
+8. **Real-World ShotSelect Architecture Mapping**
+   - Clustered across 25 components, 1,690 source files, 511,840 LOC, and 1,876 test files (31,523 correlated test cases).
 
 ---
 
