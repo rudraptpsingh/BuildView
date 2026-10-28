@@ -1,0 +1,291 @@
+@import "tailwindcss";
+
+:root {
+  /* Surfaces (Workbench / Precision Instrument) */
+  --surface-canvas: #e9ecf0;
+  --surface-window: #f2f5f8;
+  --surface-titlebar: #e6e9ee;
+  --surface-toolbar: #e6e9ee;
+  --surface-raised: #ffffff;
+  --surface-control: #e0e4eb;
+  --surface-control-hover: #d5dae2;
+  --surface-selected: #2563eb;
+  --surface-danger: rgba(239, 68, 68, 0.12);
+
+  /* Borders */
+  --border-window: #cbd2dc;
+  --border-strong: #bac2ce;
+  --border-default: #d1d8e2;
+  --border-subtle: #e2e7ef;
+
+  /* Text */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #64748b;
+  --text-disabled: #94a3b8;
+
+  /* Semantic signals (from user kit) */
+  --signal-active: #0284c7;
+  --signal-danger: #dc2626;
+  --signal-success: #16a34a;
+  --signal-warning: #d97706;
+
+  /* Typography */
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+
+  /* Geometry */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  color: var(--text-primary);
+  background: var(--surface-canvas);
+  font-family: var(--font-ui);
+}
+
+.dark {
+  /* Surfaces (Mac Activity Monitor / Dark Workbench) */
+  --surface-canvas: #0c0d0f;
+  --surface-window: #16171a;
+  --surface-titlebar: #1e1f23;
+  --surface-toolbar: #1e1f23;
+  --surface-raised: #1c1d21;
+  --surface-control: #27282d;
+  --surface-control-hover: #35363d;
+  --surface-selected: #1a56db;
+  --surface-danger: rgba(255, 69, 58, 0.15);
+
+  /* Borders */
+  --border-window: #3f4047;
+  --border-strong: #33343b;
+  --border-default: #2a2b31;
+  --border-subtle: #202126;
+
+  /* Text */
+  --text-primary: #f2f2f7;
+  --text-secondary: #c7c7cc;
+  --text-tertiary: #8e8e93;
+  --text-disabled: #636366;
+
+  /* Semantic signals */
+  --signal-active: #32ade6;
+  --signal-danger: #ff453a;
+  --signal-success: #30d158;
+  --signal-warning: #ffd60a;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+code, pre, .font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ==========================================================================
+   REUSABLE UI KIT (From User's AgentMonitor & ui-ux-pro-max repositories)
+   ========================================================================== */
+
+/* Appmark Brand Icon */
+.appmark {
+  width: 26px;
+  height: 26px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: rgba(50, 173, 230, 0.15);
+  border: 1px solid rgba(50, 173, 230, 0.35);
+  color: var(--signal-active);
+  font: 700 13px var(--font-mono);
+}
+
+/* Segmented Tabs (macOS Activity Monitor Style) */
+.segmented-tabs {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.segmented-tab {
+  height: 26px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+  border-radius: 5px;
+  white-space: nowrap;
+  transition: all 0.12s ease;
+  cursor: pointer;
+}
+
+.segmented-tab:hover {
+  color: var(--text-primary);
+}
+
+.segmented-tab.active {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* Action Button Group */
+.action-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.action-btn {
+  height: 26px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  transition: all 0.12s ease;
+  cursor: pointer;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: var(--surface-control-hover);
+  color: var(--text-primary);
+}
+
+.action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.action-btn.active {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Status Pills (Direct from AgentMonitor) */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid;
+  border-radius: var(--radius-sm);
+  font: 600 10px var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.pill.blue {
+  color: #0284c7;
+  background: rgba(2, 132, 199, 0.1);
+  border-color: rgba(2, 132, 199, 0.3);
+}
+
+.dark .pill.blue {
+  color: #65c9f1;
+  background: rgba(50, 173, 230, 0.12);
+  border-color: rgba(50, 173, 230, 0.35);
+}
+
+.pill.green {
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.1);
+  border-color: rgba(22, 163, 74, 0.3);
+}
+
+.dark .pill.green {
+  color: #72d894;
+  background: rgba(48, 209, 88, 0.12);
+  border-color: rgba(48, 209, 88, 0.35);
+}
+
+.pill.amber {
+  color: #d97706;
+  background: rgba(217, 119, 6, 0.1);
+  border-color: rgba(217, 119, 6, 0.3);
+}
+
+.dark .pill.amber {
+  color: #ffb340;
+  background: rgba(255, 159, 10, 0.12);
+  border-color: rgba(255, 159, 10, 0.35);
+}
+
+.pill.danger {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.3);
+}
+
+.dark .pill.danger {
+  color: #ff918a;
+  background: var(--surface-danger);
+  border-color: rgba(255, 69, 58, 0.35);
+}
+
+.pill.neutral {
+  color: var(--text-secondary);
+  background: var(--surface-control);
+  border-color: var(--border-default);
+}
+
+/* Card & Surface Primitives */
+.neu-card {
+  background: var(--surface-window);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.neu-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: var(--border-strong);
+}
+
+.neu-surface {
+  background: var(--surface-window);
+  border: 1px solid var(--border-default);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.neu-well {
+  background: var(--surface-control);
+  border: 1px solid var(--border-subtle);
+}
+
+.hairline-b {
+  border-bottom: 1px solid var(--border-default);
+}
+.hairline-t {
+  border-top: 1px solid var(--border-default);
+}
+.hairline-l {
+  border-left: 1px solid var(--border-default);
+}

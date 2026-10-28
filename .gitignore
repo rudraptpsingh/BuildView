@@ -1,0 +1,7 @@
+node_modules
+dist
+.buildview
+.buildview_test
+.buildview_mcp_test
+.DS_Store
+*.log
