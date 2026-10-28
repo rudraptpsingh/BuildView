@@ -451,7 +451,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
                   <span>•</span>
                   <span
                     className="flex items-center space-x-0.5 text-purple-400 font-bold"
-                    title={`${comp.figmaComponents.length} Figma design component(s) connected via FigBridge`}
+                    title={`${comp.figmaComponents.length} Figma design component(s) connected`}
                   >
                     <Palette className="w-2.5 h-2.5" />
                     <span>{comp.figmaComponents.length}</span>
@@ -888,12 +888,12 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
               </button>
             </div>
 
-            {/* FigBridge Design Connection if present */}
+            {/* Figma Design Connection if present */}
             {activeComponent.figmaComponents && activeComponent.figmaComponents.length > 0 && (
               <div className="mt-2.5 flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/30 text-[10px] font-mono text-purple-300">
                 <div className="flex items-center space-x-1.5 truncate mr-2">
                   <Palette className="w-3 h-3 text-purple-400 shrink-0" />
-                  <span className="font-bold text-purple-400">FigBridge:</span>
+                  <span className="font-bold text-purple-400">Figma Design:</span>
                   <span className="truncate text-[var(--text-secondary)]">
                     {activeComponent.figmaComponents.map((f) => f.name).slice(0, 3).join(', ')}
                     {activeComponent.figmaComponents.length > 3 ? ` +${activeComponent.figmaComponents.length - 3} more` : ''}

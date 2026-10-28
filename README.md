@@ -88,7 +88,7 @@ BuildView is available as both an npm CLI command and a programmatic TypeScript 
 Run directly on any codebase without installing:
 
 ```bash
-# Scan any repository, generate DAG, detect AST waste, and link FigBridge designs
+# Scan any repository, generate DAG, detect AST waste & invariants
 npx buildview scan /path/to/repo
 
 # Run in CI/CD pipeline to verify clean layer boundaries & circular dependencies (fails on violations)
@@ -119,11 +119,11 @@ console.log(`Saved architecture artifact to buildview-architecture.json`);
 
 ---
 
-## FigBridge & Design System Connection
+## Design System & Figma Token Correlation (Optional)
 
-If your project contains a `figbridge.connect.json` design-token mapping:
+If your project contains a `figbridge.connect.json` design-token or Figma connect mapping:
 - BuildView **automatically correlates** Figma components, variant IDs, and design names directly to the corresponding React/TypeScript implementation files.
-- The visualizer displays dedicated purple **FigBridge Mapped** status pills on each connected component with quick inspection of Figma node IDs.
+- The visualizer displays dedicated purple **Figma Design** status pills on each connected component with quick inspection of Figma node IDs.
 
 ---
 

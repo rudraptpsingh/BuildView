@@ -130,6 +130,29 @@ export interface ArchitectureLayer {
   color?: string;
 }
 
+export interface ArchitectureStep {
+  id: string;
+  order: number;
+  title: string;
+  description: string;
+  targetComponentId: string;
+  action: 'create' | 'refactor' | 'deprecate' | 'verify';
+  status: 'pending' | 'in_progress' | 'completed';
+  requiredFiles?: string[];
+  verificationCriteria?: string[];
+}
+
+export interface ArchitecturePlan {
+  id: string;
+  title: string;
+  summary: string;
+  createdAt: string;
+  status: 'draft' | 'in_progress' | 'completed';
+  activeStepIndex: number;
+  steps: ArchitectureStep[];
+  affectedComponentIds: string[]; // Blast radius component IDs
+}
+
 export interface BuildViewProject {
   id: string;
   name: string;
@@ -141,6 +164,7 @@ export interface BuildViewProject {
     fileKey?: string;
     totalMappedComponents: number;
   };
+  activePlan?: ArchitecturePlan;
   activeStep?: number;
   totalSteps?: number;
   lastUpdated: string;

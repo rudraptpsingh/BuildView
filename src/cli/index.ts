@@ -4,19 +4,20 @@ import { BuildViewStore } from '../server/store.js';
 import { RepoScannerService } from '../server/repo-scanner-service.js';
 
 const USAGE = `
-BuildView CLI — Autonomous Architecture Mapping & AST Invariant Tool
+BuildView CLI — Autonomous Architecture Mapping, Invariant & Change Planning Tool
 
 Usage:
   npx buildview [command] [options] [target-directory]
 
 Commands:
-  scan [dir]     Scan codebase AST, detect dead code waste, map FigBridge & DAG (default)
+  scan [dir]     Scan codebase AST, detect dead code waste, and build DAG architecture map (default)
+  plan [dir]     Plan technical architecture changes, calculate blast radius & migration steps
   check [dir]    Verify clean layer boundaries & circular dependency rules (CI/CD mode)
   help           Display this help screen
 
 Examples:
   npx buildview scan .
-  npx buildview scan /path/to/my-repo
+  npx buildview plan .
   npx buildview check .
 `;
 
@@ -30,7 +31,7 @@ async function run() {
       console.log(USAGE);
       process.exit(0);
     }
-    if (args[0] === 'scan' || args[0] === 'check') {
+    if (args[0] === 'scan' || args[0] === 'check' || args[0] === 'plan') {
       command = args[0];
       targetPath = args[1] || '.';
     } else {
@@ -69,13 +70,39 @@ async function run() {
     console.log(`🧪 Tests Correlated: ${totalTests}`);
     console.log(`⚠️ Active Gaps & Invariants: ${unresolvedGaps.length}`);
 
-    if (project.figmaBridge) {
-      console.log(`🎨 FigBridge Mappings: ${project.figmaBridge.totalMappedComponents} Figma components linked`);
+    if (project.figmaBridge && project.figmaBridge.totalMappedComponents > 0) {
+      console.log(`🎨 Design System Mappings: ${project.figmaBridge.totalMappedComponents} Figma component(s) linked`);
     }
 
     console.log(`💾 Architecture Artifact: ${path.join(resolvedTarget, 'buildview-architecture.json')}`);
     console.log(`👉 View live dashboard: http://localhost:5173`);
     console.log('======================================================\n');
+
+    if (command === 'plan') {
+      const plan = store.createArchitecturePlan();
+      console.log(`\n======================================================`);
+      console.log(`🗺️  ARCHITECTURE CHANGE & MIGRATION PLAN`);
+      console.log(`📋 Plan: ${plan.title}`);
+      console.log(`🎯 Affected Components (Blast Radius): ${plan.affectedComponentIds.length}`);
+      console.log(`======================================================`);
+      for (const step of plan.steps) {
+        const blast = store.getBlastRadius(step.targetComponentId);
+        const actionTag = `[${step.action.toUpperCase()}]`;
+        console.log(`\n  Step ${step.order}: ${actionTag} ${step.title}`);
+        console.log(`     Target: ${step.targetComponentId}`);
+        console.log(`     Blast Radius: ${blast.totalAffectedComponents} downstream component(s) (Risk: ${blast.riskLevel})`);
+        if (blast.downstreamBreakageWarning) {
+          console.log(`     ⚠️ Warning: ${blast.downstreamBreakageWarning}`);
+        }
+        if (step.verificationCriteria && step.verificationCriteria.length > 0) {
+          console.log(`     Verification: ${step.verificationCriteria.join('; ')}`);
+        }
+      }
+      console.log(`\n======================================================`);
+      console.log(`💾 Plan persisted to store and broadcast to live visualizers`);
+      console.log(`👉 Open http://localhost:5173 to track execution progress in real time.`);
+      console.log(`======================================================\n`);
+    }
 
     if (command === 'check' && unresolvedGaps.length > 0) {
       console.error(`❌ BuildView Invariant Check Failed: ${unresolvedGaps.length} architectural gap(s) detected.`);

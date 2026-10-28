@@ -1,5 +1,5 @@
 /**
- * BuildView — Autonomous Architecture Visualizer, AST Invariant Linter & FigBridge Mapper
+ * BuildView — Autonomous Architecture Visualizer, Dependency Graph Analyzer & Technical Change Planner
  * Programmatic Library API
  */
 

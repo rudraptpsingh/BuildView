@@ -33,8 +33,8 @@ async function main() {
     console.log(`🔢 Lines of Code Tracked: ${totalLines.toLocaleString()}`);
     console.log(`🧪 Tests Correlated: ${totalTests}`);
     console.log(`⚠️ Active Gaps: ${totalGaps}`);
-    if (project.figmaBridge) {
-      console.log(`🎨 FigBridge Mappings: ${project.figmaBridge.totalMappedComponents} Figma components linked`);
+    if (project.figmaBridge && project.figmaBridge.totalMappedComponents > 0) {
+      console.log(`🎨 Design System Mappings: ${project.figmaBridge.totalMappedComponents} Figma component(s) linked`);
     }
     console.log(`💾 Architecture Artifact: ${path.join(resolvedTarget, 'buildview-architecture.json')}`);
     console.log(`👉 View live dashboard: http://localhost:5173`);

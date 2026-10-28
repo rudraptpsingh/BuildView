@@ -9,7 +9,9 @@ import {
   FileChange,
   TimelineEvent,
   ComponentStatus,
+  ArchitecturePlan,
 } from '../shared/types.js';
+import { ArchitecturePlanner } from './parser/architecture-planner.js';
 
 export class BuildViewStore extends EventEmitter {
   private project: BuildViewProject;
@@ -315,5 +317,55 @@ export class BuildViewStore extends EventEmitter {
     });
     this.save();
     return this.project;
+  }
+
+  public createArchitecturePlan(title?: string, summary?: string): ArchitecturePlan {
+    const plan = ArchitecturePlanner.generatePlan(this.project, title, summary);
+    this.project.activePlan = plan;
+    this.addTimelineEvent({
+      type: 'progress_update',
+      title: 'Architecture Plan Created',
+      description: `Plan "${plan.title}" created with ${plan.steps.length} sequential execution steps.`,
+    });
+    this.save();
+    return plan;
+  }
+
+  public getActivePlan(): ArchitecturePlan | undefined {
+    return this.project.activePlan;
+  }
+
+  public advancePlanStep(stepId?: string): ArchitecturePlan | undefined {
+    const plan = this.project.activePlan;
+    if (!plan) return undefined;
+
+    const currentStep = plan.steps[plan.activeStepIndex];
+    if (currentStep) {
+      currentStep.status = 'completed';
+    }
+
+    if (plan.activeStepIndex + 1 < plan.steps.length) {
+      plan.activeStepIndex += 1;
+      plan.steps[plan.activeStepIndex].status = 'in_progress';
+      this.addTimelineEvent({
+        type: 'progress_update',
+        title: `Plan Advanced to Step ${plan.activeStepIndex + 1}`,
+        description: `Now executing: "${plan.steps[plan.activeStepIndex].title}"`,
+      });
+    } else {
+      plan.status = 'completed';
+      this.addTimelineEvent({
+        type: 'progress_update',
+        title: 'Architecture Plan Completed',
+        description: `All ${plan.steps.length} steps of "${plan.title}" have been successfully executed.`,
+      });
+    }
+
+    this.save();
+    return plan;
+  }
+
+  public getBlastRadius(componentId: string) {
+    return ArchitecturePlanner.calculateBlastRadius(this.project.components, componentId);
   }
 }
