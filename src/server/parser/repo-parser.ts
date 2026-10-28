@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import ts from 'typescript';
+import { isTestPath } from '../analysis/file-roles.js';
+import { matchesAnyGlob } from '../analysis/glob.js';
 import {
   DataMember,
   FunctionSpec,
@@ -20,7 +22,12 @@ export interface ExportedSymbol {
 export interface ImportDetail {
   specifier: string;
   importedSymbols: string[];
+  /** True when the import is erased at build time (`import type`, or every specifier is `type`). */
   isTypeOnly?: boolean;
+  /** 1-based line of the import statement. */
+  line?: number;
+  /** How the dependency is expressed. Missing means a static `import`. */
+  kind?: 'import' | 'reexport' | 'dynamic' | 'require';
 }
 
 export interface FunctionDetail extends FunctionSpec {
@@ -41,22 +48,31 @@ export interface ParsedFileResult {
   testSuites?: string[];
   testCases?: TestCaseInfo[];
   astMetrics: AstMetrics;
+  /**
+   * Identifier references per name inside this file, excluding declaration
+   * names, export specifiers and property names. Used to tell an export that
+   * is only needed locally from one that is dead.
+   */
+  localReferenceCounts?: Record<string, number>;
+}
+
+export interface ParseFileOptions {
+  /** Overrides the built-in test-path detection (e.g. from buildview.config.json testGlobs). */
+  isTestFile?: boolean;
 }
 
 export class RepoParser {
   /**
    * Parses an individual TypeScript/JavaScript source or test file using the TypeScript AST compiler.
    */
-  public static parseFile(filePath: string, fileContent: string): ParsedFileResult {
-    const isTestFile = /\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$/.test(filePath) ||
-      filePath.includes('/__tests__/') ||
-      filePath.includes('/tests/');
+  public static parseFile(filePath: string, fileContent: string, options: ParseFileOptions = {}): ParsedFileResult {
+    const isTestFile = options.isTestFile ?? isTestPath(filePath);
 
     const sourceFile = ts.createSourceFile(
       path.basename(filePath),
       fileContent,
       ts.ScriptTarget.Latest,
-      false,
+      true,
       filePath.endsWith('.tsx') || filePath.endsWith('.jsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
     );
 
@@ -76,6 +92,41 @@ export class RepoParser {
 
     let currentSuite = 'Root';
 
+    const localReferenceCounts: Record<string, number> = Object.create(null);
+
+    function lineOf(node: ts.Node): number {
+      return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+    }
+
+    function isDeclarationOrPropertyName(id: ts.Identifier): boolean {
+      const parent = id.parent;
+      if (!parent) return false;
+      if (
+        (ts.isFunctionDeclaration(parent) ||
+          ts.isClassDeclaration(parent) ||
+          ts.isInterfaceDeclaration(parent) ||
+          ts.isTypeAliasDeclaration(parent) ||
+          ts.isEnumDeclaration(parent) ||
+          ts.isVariableDeclaration(parent) ||
+          ts.isMethodDeclaration(parent) ||
+          ts.isPropertyDeclaration(parent) ||
+          ts.isPropertySignature(parent) ||
+          ts.isMethodSignature(parent) ||
+          ts.isPropertyAssignment(parent) ||
+          ts.isEnumMember(parent) ||
+          ts.isGetAccessorDeclaration(parent) ||
+          ts.isSetAccessorDeclaration(parent)) &&
+        (parent as ts.NamedDeclaration).name === id
+      ) {
+        return true;
+      }
+      if (ts.isPropertyAccessExpression(parent) && parent.name === id) return true;
+      if (ts.isExportSpecifier(parent) || ts.isImportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) {
+        return true;
+      }
+      return false;
+    }
+
     function isNodeExported(node: ts.Node): boolean {
       return (ts.getCombinedModifierFlags(node as ts.Declaration) & ts.ModifierFlags.Export) !== 0;
     }
@@ -87,15 +138,19 @@ export class RepoParser {
           const specifier = node.moduleSpecifier.text;
           imports.push(specifier);
           const importedSymbols: string[] = [];
+          let allSpecifiersTypeOnly = false;
           if (node.importClause) {
             if (node.importClause.name) {
               importedSymbols.push(node.importClause.name.text);
             }
             if (node.importClause.namedBindings) {
               if (ts.isNamedImports(node.importClause.namedBindings)) {
-                for (const el of node.importClause.namedBindings.elements) {
-                  importedSymbols.push(el.name.text);
+                const elements = node.importClause.namedBindings.elements;
+                for (const el of elements) {
+                  importedSymbols.push((el.propertyName || el.name).text);
                 }
+                allSpecifiersTypeOnly =
+                  !node.importClause.name && elements.length > 0 && elements.every((el) => el.isTypeOnly);
               } else if (ts.isNamespaceImport(node.importClause.namedBindings)) {
                 importedSymbols.push(node.importClause.namedBindings.name.text);
               }
@@ -104,9 +159,50 @@ export class RepoParser {
           importDetails.push({
             specifier,
             importedSymbols,
-            isTypeOnly: node.importClause?.isTypeOnly || false,
+            isTypeOnly: node.importClause?.isTypeOnly || allSpecifiersTypeOnly,
+            line: lineOf(node),
+            kind: 'import',
           });
         }
+      }
+
+      // 1b. Re-exports (export { a } from './x', export * from './x')
+      if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        const specifier = node.moduleSpecifier.text;
+        imports.push(specifier);
+        const importedSymbols: string[] = [];
+        let allTypeOnly = node.isTypeOnly;
+        if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+          for (const el of node.exportClause.elements) {
+            importedSymbols.push((el.propertyName || el.name).text);
+          }
+          if (!allTypeOnly && node.exportClause.elements.length > 0) {
+            allTypeOnly = node.exportClause.elements.every((el) => el.isTypeOnly);
+          }
+        }
+        importDetails.push({ specifier, importedSymbols, isTypeOnly: allTypeOnly, line: lineOf(node), kind: 'reexport' });
+      }
+
+      // 1c. Dynamic import('x') and require('x')
+      if (ts.isCallExpression(node) && node.arguments.length >= 1 && ts.isStringLiteralLike(node.arguments[0])) {
+        const isDynamic = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+        const isRequire = ts.isIdentifier(node.expression) && node.expression.text === 'require';
+        if (isDynamic || isRequire) {
+          const specifier = (node.arguments[0] as ts.StringLiteralLike).text;
+          imports.push(specifier);
+          importDetails.push({
+            specifier,
+            importedSymbols: [],
+            isTypeOnly: false,
+            line: lineOf(node),
+            kind: isDynamic ? 'dynamic' : 'require',
+          });
+        }
+      }
+
+      // 1d. Local identifier references (for "used only in its own file" detection)
+      if (ts.isIdentifier(node) && !isDeclarationOrPropertyName(node)) {
+        localReferenceCounts[node.text] = (localReferenceCounts[node.text] || 0) + 1;
       }
 
       // 2. Export Declarations (export { a, b })
@@ -343,6 +439,7 @@ export class RepoParser {
       exportedSymbols,
       testSuites: isTestFile ? testSuites : undefined,
       testCases: isTestFile ? testCases : undefined,
+      localReferenceCounts: { ...localReferenceCounts },
       astMetrics: {
         totalFunctions,
         totalClasses,
@@ -442,10 +539,16 @@ export class RepoParser {
     options: {
       includeExtensions?: string[];
       ignoreDirs?: string[];
+      /** Extra globs that mark files as tests (buildview.config.json testGlobs). */
+      testGlobs?: string[];
+      /** Files or folders to skip (buildview.config.json ignoreGlobs). */
+      ignoreGlobs?: string[];
     } = {}
   ): {
     sourceFiles: ParsedFileResult[];
     testFiles: ParsedFileResult[];
+    /** Repo-relative folders that contain a tsconfig.json (for path alias resolution). */
+    tsconfigDirs: string[];
   } {
     const extFilter = options.includeExtensions || ['.ts', '.tsx', '.js', '.jsx', '.mjs'];
     const defaultIgnoreDirs = [
@@ -490,18 +593,24 @@ export class RepoParser {
 
     const sourceFiles: ParsedFileResult[] = [];
     const testFiles: ParsedFileResult[] = [];
+    const tsconfigDirs: string[] = [];
 
     function traverse(currentDir: string) {
       if (!fs.existsSync(currentDir)) return;
       const entries = fs.readdirSync(currentDir, { withFileTypes: true });
 
       for (const entry of entries) {
+        const relEntry = path.relative(rootDir, path.join(currentDir, entry.name)).replace(/\\/g, '/');
+        if (options.ignoreGlobs && matchesAnyGlob(relEntry, options.ignoreGlobs)) continue;
         if (entry.isDirectory()) {
           if (entry.name.startsWith('.') || ignoreDirs.has(entry.name)) {
             continue;
           }
           traverse(path.join(currentDir, entry.name));
         } else if (entry.isFile()) {
+          if (entry.name === 'tsconfig.json') {
+            tsconfigDirs.push(path.relative(rootDir, currentDir).replace(/\\/g, '/') || '.');
+          }
           const ext = path.extname(entry.name);
           if (extFilter.includes(ext)) {
             const fullPath = path.join(currentDir, entry.name);
@@ -511,7 +620,9 @@ export class RepoParser {
               if (stat.size > 1024 * 1024) continue; // skip files > 1MB
 
               const content = fs.readFileSync(fullPath, 'utf-8');
-              const parsed = RepoParser.parseFile(relativePath, content);
+              const parsed = RepoParser.parseFile(relativePath, content, {
+                isTestFile: isTestPath(relativePath, options.testGlobs),
+              });
               if (parsed.isTestFile) {
                 testFiles.push(parsed);
               } else {
@@ -527,6 +638,6 @@ export class RepoParser {
 
     traverse(rootDir);
 
-    return { sourceFiles, testFiles };
+    return { sourceFiles, testFiles, tsconfigDirs };
   }
 }
