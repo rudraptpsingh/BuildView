@@ -2,6 +2,7 @@
 import path from 'path';
 import { BuildViewStore } from '../server/store.js';
 import { RepoScannerService } from '../server/repo-scanner-service.js';
+import { resolvePort } from './report.js';
 
 async function main() {
   const targetPath = process.argv[2] || process.cwd();
@@ -37,7 +38,7 @@ async function main() {
       console.log(`🎨 Design System Mappings: ${project.figmaBridge.totalMappedComponents} Figma component(s) linked`);
     }
     console.log(`💾 Architecture Artifact: ${path.join(resolvedTarget, 'buildview-architecture.json')}`);
-    console.log(`👉 View live dashboard: http://localhost:5173`);
+    console.log(`👉 View live dashboard: http://localhost:${resolvePort(undefined)}`);
     console.log('======================================================\n');
   } catch (err: any) {
     console.error(`❌ Scan failed:`, err.message);

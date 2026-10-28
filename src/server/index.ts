@@ -9,7 +9,7 @@ import { getCliDemoProject } from './demo-data.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT || 3333;
+const PORT = process.env.BUILDVIEW_PORT || process.env.PORT || 3333;
 
 async function bootstrap() {
   const app = express();
@@ -38,7 +38,7 @@ async function bootstrap() {
     console.log(`\n======================================================`);
     console.log(`🚀 BuildView Server & Real-Time Sync running on port ${PORT}`);
     console.log(`👉 Web Visualizer API & SSE: http://localhost:${PORT}/api/events`);
-    console.log(`👉 Web App (Vite Dev Server): http://localhost:5173`);
+    console.log(`👉 Web App: http://localhost:${PORT} (built client) or the Vite dev server when running npm run dev`);
     console.log(`👉 Standalone MCP Stdio: npm run mcp`);
     console.log(`======================================================\n`);
   });
