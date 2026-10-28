@@ -11,11 +11,17 @@ import {
   Check,
   Layers,
   Terminal,
+  TestTube,
+  Trash2,
+  Sparkles,
+  HelpCircle,
 } from 'lucide-react';
 import { ArchitectureComponent } from '@shared/types.js';
 import { StatusBadge } from './ui/StatusBadge.js';
 import { SeverityBadge } from './ui/SeverityBadge.js';
 import { ProgressBar } from './ui/ProgressBar.js';
+import { TestBadge } from './ui/TestBadge.js';
+import { WasteBadge } from './ui/WasteBadge.js';
 
 interface ComponentDrawerProps {
   component: ArchitectureComponent | null;
@@ -30,7 +36,7 @@ export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({
   onClose,
   onNavigateToComponent,
 }) => {
-  const [activeTab, setActiveTab] = useState<'anatomy' | 'graph' | 'files' | 'gaps'>('anatomy');
+  const [activeTab, setActiveTab] = useState<'anatomy' | 'graph' | 'files' | 'gaps' | 'tests' | 'waste'>('anatomy');
   const [copiedFile, setCopiedFile] = useState<string | null>(null);
 
   if (!component) return null;
@@ -97,7 +103,7 @@ export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({
 
           {/* Navigation Segmented Tabs (AgentMonitor style) */}
           <div className="mt-4 pt-2.5 hairline-t">
-            <div className="segmented-tabs font-mono text-xs">
+            <div className="segmented-tabs font-mono text-xs flex-wrap">
               <button
                 onClick={() => setActiveTab('anatomy')}
                 className={`segmented-tab ${activeTab === 'anatomy' ? 'active' : ''}`}
@@ -120,6 +126,22 @@ export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({
               >
                 <FileCode className="w-3.5 h-3.5" />
                 <span>FILES ({component.files.length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('tests')}
+                className={`segmented-tab ${activeTab === 'tests' ? 'active' : ''}`}
+              >
+                <TestTube className="w-3.5 h-3.5" />
+                <span>TESTS ({component.testSummary?.totalTests || 0})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('waste')}
+                className={`segmented-tab ${activeTab === 'waste' ? 'active' : ''}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>PRUNE ({component.wasteMetrics?.unusedExports.length || 0})</span>
               </button>
 
               <button
@@ -445,6 +467,225 @@ export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 5: TESTS & VERIFICATION COVERAGE */}
+          {activeTab === 'tests' && (
+            <div className="space-y-5">
+              {/* Coverage Telemetry Header */}
+              <div className="p-4 rounded-xl neu-surface hairline-b">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2 font-mono">
+                    <TestTube className="w-4 h-4 text-emerald-500" />
+                    <span className="text-xs font-bold text-[var(--text-primary)]">
+                      VERIFICATION & TEST COVERAGE
+                    </span>
+                  </div>
+                  <TestBadge testSummary={component.testSummary} />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2.5 mt-3 pt-2.5 hairline-t font-mono text-center">
+                  <div className="p-2 rounded neu-well">
+                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase">TEST FILES</div>
+                    <div className="text-sm font-bold text-[var(--text-primary)]">
+                      {component.testFiles?.length || component.testSummary?.testFilesCount || 0}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded neu-well">
+                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase">TOTAL ASSERTIONS</div>
+                    <div className="text-sm font-bold text-[var(--text-primary)]">
+                      {component.testSummary?.totalTests || 0}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded neu-well">
+                    <div className="text-[10px] text-[var(--text-tertiary)] uppercase">EST. COVERAGE</div>
+                    <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                      {component.testSummary?.coverageEstimatePercent || 0}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Test Suites and Test Cases */}
+              {component.testFiles && component.testFiles.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--text-tertiary)]">
+                    LINKED TEST SPECIFICATIONS ({component.testFiles.length})
+                  </div>
+                  {component.testFiles.map((testFile, idx) => (
+                    <div key={idx} className="p-3.5 rounded-xl neu-surface hairline-b space-y-2.5">
+                      <div className="flex items-center justify-between text-xs font-mono">
+                        <span className="font-bold text-[var(--text-primary)] truncate" title={testFile.path}>
+                          {testFile.path}
+                        </span>
+                        <span className="pill green text-[10px]">
+                          {testFile.testCount} TESTS
+                        </span>
+                      </div>
+
+                      {/* Suites */}
+                      {testFile.suites && testFile.suites.length > 0 && (
+                        <div className="flex flex-wrap gap-1 text-[10px] font-mono">
+                          {testFile.suites.map((s, sIdx) => (
+                            <span key={sIdx} className="px-1.5 py-0.5 rounded neu-well text-[var(--text-secondary)]">
+                              suite: {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Individual Test Cases */}
+                      {testFile.testCases && testFile.testCases.length > 0 && (
+                        <div className="space-y-1 pt-1 hairline-t">
+                          {testFile.testCases.map((tc, tcIdx) => (
+                            <div key={tcIdx} className="flex items-center space-x-2 text-[11px] font-mono text-[var(--text-secondary)]">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                              <span className="truncate">{tc.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 rounded-xl neu-well text-center space-y-2">
+                  <HelpCircle className="w-6 h-6 text-amber-500 mx-auto" />
+                  <div className="text-xs font-mono font-bold text-[var(--text-primary)]">
+                    NO LINKED TESTS FOUND
+                  </div>
+                  <p className="text-[11px] text-[var(--text-tertiary)] max-w-md mx-auto">
+                    This component currently lacks automated test coverage. Coding agents should generate a unit test file targeting its callable contract methods.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 6: WASTE & PRUNING ANALYSIS */}
+          {activeTab === 'waste' && (
+            <div className="space-y-5">
+              {/* Cleanliness Telemetry Header */}
+              <div className="p-4 rounded-xl neu-surface hairline-b">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2 font-mono">
+                    <Trash2 className="w-4 h-4 text-amber-500" />
+                    <span className="text-xs font-bold text-[var(--text-primary)]">
+                      CODE WASTE & PRUNING AUDIT
+                    </span>
+                  </div>
+                  <WasteBadge wasteMetrics={component.wasteMetrics} />
+                </div>
+
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-xs font-mono mb-1">
+                    <span className="text-[var(--text-tertiary)] uppercase font-semibold">CLEANLINESS SCORE</span>
+                    <span className="font-bold text-[var(--text-primary)]">
+                      {component.wasteMetrics?.cleanlinessScore ?? 100}%
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full neu-well overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        (component.wasteMetrics?.cleanlinessScore ?? 100) >= 90
+                          ? 'bg-[#30d158]'
+                          : (component.wasteMetrics?.cleanlinessScore ?? 100) >= 70
+                          ? 'bg-[#ff9f0a]'
+                          : 'bg-[#ff453a]'
+                      }`}
+                      style={{ width: `${component.wasteMetrics?.cleanlinessScore ?? 100}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Unused Exports */}
+              {component.wasteMetrics && component.wasteMetrics.unusedExports.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-500 flex items-center justify-between">
+                    <span>DEAD / UNUSED EXPORTS ({component.wasteMetrics.unusedExports.length})</span>
+                    <span>ACTION: PRUNE</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {component.wasteMetrics.unusedExports.map((sym, sIdx) => (
+                      <div
+                        key={sIdx}
+                        className="p-2.5 rounded-lg neu-well flex items-center justify-between text-xs font-mono"
+                      >
+                        <div className="flex items-center space-x-2 truncate">
+                          <Trash2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          <span className="text-[var(--text-primary)] font-semibold truncate">{sym}</span>
+                        </div>
+                        <button
+                          onClick={() => copyPath(sym.split(':').pop() || sym)}
+                          className="action-btn text-[10px] py-0.5 px-1.5"
+                          title="Copy symbol identifier"
+                        >
+                          <Copy className="w-2.5 h-2.5 mr-1" />
+                          COPY
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Duplicate Functions */}
+              {component.wasteMetrics && component.wasteMetrics.duplicateFunctions.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-500 flex items-center justify-between">
+                    <span>DUPLICATE IMPLEMENTATIONS ({component.wasteMetrics.duplicateFunctions.length})</span>
+                    <span>ACTION: CONSOLIDATE</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {component.wasteMetrics.duplicateFunctions.map((dup, dIdx) => (
+                      <div key={dIdx} className="p-3 rounded-lg neu-well text-xs font-mono space-y-1.5">
+                        <div className="flex items-center justify-between font-bold text-[var(--text-primary)]">
+                          <span>{dup.name}()</span>
+                          <span className="pill amber text-[9px]">100% MATCH</span>
+                        </div>
+                        <p className="text-[11px] text-[var(--text-tertiary)] font-sans">
+                          {dup.reason}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Test Zombies */}
+              {component.wasteMetrics && component.wasteMetrics.testZombies.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-blue-500 flex items-center justify-between">
+                    <span>TEST ZOMBIES ({component.wasteMetrics.testZombies.length})</span>
+                    <span>CALLED ONLY BY TESTS</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {component.wasteMetrics.testZombies.map((zombie, zIdx) => (
+                      <div key={zIdx} className="p-2.5 rounded-lg neu-well text-xs font-mono">
+                        <span className="text-[var(--text-primary)] font-semibold">{zombie}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Clean Status Banner if zero waste */}
+              {(!component.wasteMetrics ||
+                (component.wasteMetrics.unusedExports.length === 0 &&
+                  component.wasteMetrics.duplicateFunctions.length === 0 &&
+                  component.wasteMetrics.testZombies.length === 0)) && (
+                <div className="p-6 rounded-xl neu-surface hairline-b text-center space-y-2">
+                  <Sparkles className="w-6 h-6 text-emerald-500 mx-auto" />
+                  <div className="text-xs font-mono font-bold text-[var(--text-primary)]">
+                    CLEAN ARCHITECTURAL SPECIFICATION
+                  </div>
+                  <p className="text-[11px] text-[var(--text-tertiary)] max-w-sm mx-auto">
+                    Zero dead exports, duplicate utility functions, or orphan files detected in this component.
+                  </p>
                 </div>
               )}
             </div>

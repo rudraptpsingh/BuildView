@@ -67,6 +67,33 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         { path: 'electron/projectWorkspace.ts', status: 'created', linesChanged: 145, description: 'Project workspace directory tracker' },
         { path: 'electron/localActivityLog.ts', status: 'created', linesChanged: 95, description: 'Structured culling activity log' },
       ],
+      testSummary: {
+        testFilesCount: 2,
+        totalTests: 8,
+        status: 'tested',
+        coverageEstimatePercent: 95,
+      },
+      testFiles: [
+        {
+          path: 'electron/db.test.ts',
+          testCount: 5,
+          suites: ['SQLite Persistence Layer'],
+          testCases: [
+            { name: 'migrates schema to latest DDL version', suite: 'SQLite Persistence Layer' },
+            { name: 'inserts and updates photo rating verdict atomically', suite: 'SQLite Persistence Layer' },
+            { name: 'queries indexed session photos with filter predicates', suite: 'SQLite Persistence Layer' },
+          ],
+        },
+      ],
+      wasteMetrics: {
+        unusedExports: [],
+        deadCodeLines: 0,
+        duplicateFunctions: [],
+        orphanFiles: [],
+        testZombies: [],
+        cleanlinessScore: 100,
+        recommendation: 'clean',
+      },
       gaps: [],
       updatedAt: new Date().toISOString(),
     },
@@ -100,6 +127,32 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         { path: 'electron/tiffPreview.ts', status: 'created', linesChanged: 180, description: 'TIFF and DNG preview generator' },
         { path: 'electron/rawPreviewRevision.ts', status: 'created', linesChanged: 115, description: 'Cache invalidation revision manager' },
       ],
+      testSummary: {
+        testFilesCount: 1,
+        totalTests: 3,
+        status: 'partial',
+        coverageEstimatePercent: 65,
+      },
+      testFiles: [
+        {
+          path: 'electron/embeddedPreview.test.ts',
+          testCount: 3,
+          suites: ['RAW Preview Decoder'],
+          testCases: [
+            { name: 'extracts embedded JPEG from Canon CR3', suite: 'RAW Preview Decoder' },
+            { name: 'falls back to tiff preview on corrupt EXIF header', suite: 'RAW Preview Decoder' },
+          ],
+        },
+      ],
+      wasteMetrics: {
+        unusedExports: [],
+        deadCodeLines: 0,
+        duplicateFunctions: [],
+        orphanFiles: [],
+        testZombies: [],
+        cleanlinessScore: 100,
+        recommendation: 'clean',
+      },
       gaps: [],
       updatedAt: new Date().toISOString(),
     },
@@ -132,6 +185,32 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         { path: 'electron/exportRunner.ts', status: 'modified', linesChanged: 245, description: 'XMP batch export runner' },
         { path: 'electron/xmpWriteRefusals.test.ts', status: 'created', linesChanged: 120, description: 'XMP write permission test suite' },
       ],
+      testSummary: {
+        testFilesCount: 1,
+        totalTests: 4,
+        status: 'tested',
+        coverageEstimatePercent: 80,
+      },
+      testFiles: [
+        {
+          path: 'electron/xmpWriteRefusals.test.ts',
+          testCount: 4,
+          suites: ['XMP Permissions & Sidecar Writing'],
+          testCases: [
+            { name: 'reproduces EACCES write failure on read-only mounted volume', suite: 'XMP Permissions & Sidecar Writing' },
+            { name: 'validates sidecar XML tags adhere to Lightroom specification', suite: 'XMP Permissions & Sidecar Writing' },
+          ],
+        },
+      ],
+      wasteMetrics: {
+        unusedExports: ['exportRunner.ts:legacyXmpXmlBuilder', 'exportRunner.ts:obsoleteIptcEncoder'],
+        deadCodeLines: 42,
+        duplicateFunctions: [],
+        orphanFiles: [],
+        testZombies: ['xmpWriteRefusals.test.ts:mockReadonlyDriveHelper'],
+        cleanlinessScore: 75,
+        recommendation: 'prune',
+      },
       gaps: [
         {
           id: 'gap_xmp_readonly_refusal',
@@ -335,6 +414,40 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         { path: 'src/components/PhotoCard.tsx', status: 'created', linesChanged: 320, description: 'Individual swipe photo card' },
         { path: 'src/components/CompareMode.tsx', status: 'created', linesChanged: 280, description: 'Side-by-side compare component' },
       ],
+      testSummary: {
+        testFilesCount: 1,
+        totalTests: 3,
+        status: 'partial',
+        coverageEstimatePercent: 70,
+      },
+      testFiles: [
+        {
+          path: 'src/components/PhotoDeck.test.tsx',
+          testCount: 3,
+          suites: ['PhotoDeck Interactive Canvas'],
+          testCases: [
+            { name: 'renders virtualized cards without DOM memory leak', suite: 'PhotoDeck Interactive Canvas' },
+            { name: 'dispatches swipe verdict correctly on gesture release', suite: 'PhotoDeck Interactive Canvas' },
+          ],
+        },
+      ],
+      wasteMetrics: {
+        unusedExports: [],
+        deadCodeLines: 18,
+        duplicateFunctions: [
+          {
+            name: 'formatBytes',
+            sourceFile: 'src/components/PhotoDeck.tsx',
+            duplicateOfFile: 'electron/utils.ts',
+            similarity: 1.0,
+            reason: 'Identical logic body matching "formatBytes" in electron/utils.ts',
+          },
+        ],
+        orphanFiles: [],
+        testZombies: [],
+        cleanlinessScore: 80,
+        recommendation: 'prune',
+      },
       gaps: [],
       updatedAt: new Date().toISOString(),
     },

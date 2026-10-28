@@ -7,6 +7,7 @@ import { getShotSelectProject } from '@server/shotselect-data.js';
 import { Header } from './components/Header.js';
 import { RoadmapBanner } from './components/RoadmapBanner.js';
 import { LayerLane } from './components/LayerLane.js';
+import { ArchitectureGraph } from './components/ArchitectureGraph.js';
 import { ComponentDrawer } from './components/ComponentDrawer.js';
 import { SimulationControls } from './components/SimulationControls.js';
 import { GapsModal } from './components/GapsModal.js';
@@ -14,6 +15,7 @@ import { GapsModal } from './components/GapsModal.js';
 export const App: React.FC = () => {
   const [isDark, setIsDark] = useState<boolean>(false);
   const [activeMode, setActiveMode] = useState<'dogfood' | 'shotselect' | 'demo'>('shotselect');
+  const [viewMode, setViewMode] = useState<'lanes' | 'graph'>('lanes');
   const [project, setProject] = useState<BuildViewProject>(() => getShotSelectProject());
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [isGapsModalOpen, setIsGapsModalOpen] = useState<boolean>(false);
@@ -233,6 +235,8 @@ export const App: React.FC = () => {
         project={project}
         isConnected={isConnected}
         isDark={isDark}
+        viewMode={viewMode}
+        onToggleViewMode={setViewMode}
         onToggleTheme={() => setIsDark((prev) => !prev)}
         onReset={handleReset}
         onOpenGaps={() => setIsGapsModalOpen(true)}
@@ -247,21 +251,29 @@ export const App: React.FC = () => {
           onSelectComponent={(id) => setSelectedComponentId(id)}
         />
 
-        {/* Layer Swimlanes */}
-        <div className="space-y-8">
-          {sortedLayers.map((layer) => {
-            const compsInLayer = project.components.filter((c) => c.layerId === layer.id);
-            return (
-              <LayerLane
-                key={layer.id}
-                layer={layer}
-                components={compsInLayer}
-                selectedComponentId={selectedComponentId || undefined}
-                onSelectComponent={(c) => setSelectedComponentId(c.id)}
-              />
-            );
-          })}
-        </div>
+        {/* View Mode Switch: Lanes vs Minimal DAG Graph */}
+        {viewMode === 'graph' ? (
+          <ArchitectureGraph
+            project={project}
+            selectedComponentId={selectedComponentId}
+            onSelectComponent={(id) => setSelectedComponentId(id)}
+          />
+        ) : (
+          <div className="space-y-8">
+            {sortedLayers.map((layer) => {
+              const compsInLayer = project.components.filter((c) => c.layerId === layer.id);
+              return (
+                <LayerLane
+                  key={layer.id}
+                  layer={layer}
+                  components={compsInLayer}
+                  selectedComponentId={selectedComponentId || undefined}
+                  onSelectComponent={(c) => setSelectedComponentId(c.id)}
+                />
+              );
+            })}
+          </div>
+        )}
       </main>
 
       {/* Slide-over Component Inspector */}

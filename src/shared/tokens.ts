@@ -1,4 +1,4 @@
-import { ComponentStatus } from './types.js';
+import { ComponentStatus, TestCoverageSummary, WasteMetrics } from './types.js';
 
 export interface StatusToken {
   key: ComponentStatus;
@@ -9,6 +9,18 @@ export interface StatusToken {
 
 export interface SeverityToken {
   level: 'low' | 'medium' | 'high' | 'critical';
+  label: string;
+  pillClass: string;
+}
+
+export interface TestToken {
+  status: 'tested' | 'partial' | 'untested';
+  label: string;
+  pillClass: string;
+}
+
+export interface WasteToken {
+  recommendation: 'prune' | 'investigate' | 'clean';
   label: string;
   pillClass: string;
 }
@@ -71,14 +83,56 @@ export const SEVERITY_TOKENS: Record<'low' | 'medium' | 'high' | 'critical', Sev
 };
 
 /**
+ * Single Source of Truth for Component Test Coverage Tokens
+ */
+export const TEST_TOKENS: Record<'tested' | 'partial' | 'untested', TestToken> = {
+  tested: {
+    status: 'tested',
+    label: 'TESTED',
+    pillClass: 'pill green font-bold',
+  },
+  partial: {
+    status: 'partial',
+    label: 'PARTIAL',
+    pillClass: 'pill amber font-bold',
+  },
+  untested: {
+    status: 'untested',
+    label: 'NO TESTS',
+    pillClass: 'pill neutral font-bold opacity-75',
+  },
+};
+
+/**
+ * Single Source of Truth for Code Waste & Pruning Tokens
+ */
+export const WASTE_TOKENS: Record<'prune' | 'investigate' | 'clean', WasteToken> = {
+  clean: {
+    recommendation: 'clean',
+    label: 'CLEAN',
+    pillClass: 'pill green',
+  },
+  investigate: {
+    recommendation: 'investigate',
+    label: 'TEST ZOMBIE',
+    pillClass: 'pill blue',
+  },
+  prune: {
+    recommendation: 'prune',
+    label: 'PRUNE CANDIDATE',
+    pillClass: 'pill amber font-bold',
+  },
+};
+
+/**
  * Precision Architectural Layer Accent Palette
  */
-export const LAYER_ACCENTS: Record<string, { bar: string; color: string }> = {
-  layer_0: { bar: '#32ade6', color: 'blue' },
-  layer_1: { bar: '#30d158', color: 'green' },
-  layer_2: { bar: '#ff9f0a', color: 'amber' },
-  layer_3: { bar: '#a259ff', color: 'purple' },
-  default: { bar: '#636366', color: 'neutral' },
+export const LAYER_ACCENTS: Record<string, { bar: string; color: string; border: string }> = {
+  layer_0: { bar: '#32ade6', color: 'blue', border: '#32ade648' },
+  layer_1: { bar: '#30d158', color: 'green', border: '#30d15848' },
+  layer_2: { bar: '#ff9f0a', color: 'amber', border: '#ff9f0a48' },
+  layer_3: { bar: '#a259ff', color: 'purple', border: '#a259ff48' },
+  default: { bar: '#636366', color: 'neutral', border: '#3f4047' },
 };
 
 /**
@@ -109,6 +163,29 @@ export class TokenEngine {
       return SEVERITY_TOKENS.medium;
     }
     return token;
+  }
+
+  /**
+   * Resolves a validated test coverage token.
+   */
+  public static resolveTestToken(testSummary?: TestCoverageSummary): TestToken {
+    if (!testSummary || testSummary.totalTests === 0) {
+      return TEST_TOKENS.untested;
+    }
+    if (testSummary.status === 'partial') {
+      return TEST_TOKENS.partial;
+    }
+    return TEST_TOKENS.tested;
+  }
+
+  /**
+   * Resolves a validated waste / prune status token.
+   */
+  public static resolveWasteToken(wasteMetrics?: WasteMetrics): WasteToken {
+    if (!wasteMetrics || wasteMetrics.cleanlinessScore === 100) {
+      return WASTE_TOKENS.clean;
+    }
+    return WASTE_TOKENS[wasteMetrics.recommendation] || WASTE_TOKENS.clean;
   }
 
   /**

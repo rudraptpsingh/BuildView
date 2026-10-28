@@ -1,11 +1,13 @@
 import React from 'react';
-import { Moon, Sun, AlertTriangle, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { Moon, Sun, AlertTriangle, RotateCcw, CheckCircle2, Columns3, Network } from 'lucide-react';
 import { BuildViewProject } from '@shared/types.js';
 
 interface HeaderProps {
   project: BuildViewProject;
   isConnected: boolean;
   isDark: boolean;
+  viewMode: 'lanes' | 'graph';
+  onToggleViewMode: (mode: 'lanes' | 'graph') => void;
   onToggleTheme: () => void;
   onReset: (mode: 'demo' | 'clean') => void;
   onOpenGaps: () => void;
@@ -16,6 +18,8 @@ export const Header: React.FC<HeaderProps> = ({
   project,
   isConnected,
   isDark,
+  viewMode,
+  onToggleViewMode,
   onToggleTheme,
   onReset,
   onOpenGaps,
@@ -52,6 +56,26 @@ export const Header: React.FC<HeaderProps> = ({
               {project.description}
             </p>
           </div>
+        </div>
+
+        {/* Center: View Switcher (Lanes vs Minimal Graph) */}
+        <div className="segmented-tabs font-mono text-xs">
+          <button
+            onClick={() => onToggleViewMode('lanes')}
+            className={`segmented-tab ${viewMode === 'lanes' ? 'active' : ''}`}
+            title="Layer Swimlanes View"
+          >
+            <Columns3 className="w-3.5 h-3.5" />
+            <span>LANES</span>
+          </button>
+          <button
+            onClick={() => onToggleViewMode('graph')}
+            className={`segmented-tab ${viewMode === 'graph' ? 'active' : ''}`}
+            title="Minimal DAG Graph View"
+          >
+            <Network className="w-3.5 h-3.5" />
+            <span>DAG GRAPH</span>
+          </button>
         </div>
 
         {/* Right: Technical Telemetry & Reusable Action Groups */}

@@ -11,6 +11,8 @@ import {
 import { ArchitectureComponent } from '../../shared/types.js';
 import { StatusBadge } from './ui/StatusBadge.js';
 import { ProgressBar } from './ui/ProgressBar.js';
+import { TestBadge } from './ui/TestBadge.js';
+import { WasteBadge } from './ui/WasteBadge.js';
 
 interface ComponentCardProps {
   component: ArchitectureComponent;
@@ -70,7 +72,7 @@ export const ComponentCard: React.FC<ComponentCardProps> = ({ component, onSelec
         <ProgressBar progress={component.progress} status={effectiveStatus} hasGaps={hasGaps} size="sm" />
       </div>
 
-      {/* Anatomy Summary Chips (Members, Methods, Callers) */}
+      {/* Anatomy & Health Summary Chips (Members, Methods, Callers, Tests, Cleanliness) */}
       <div className="mt-3 pt-2.5 hairline-t flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
         <span className="px-1.5 py-0.5 rounded neu-well text-slate-600 dark:text-slate-400 flex items-center space-x-1">
           <Box className="w-2.5 h-2.5" />
@@ -84,6 +86,8 @@ export const ComponentCard: React.FC<ComponentCardProps> = ({ component, onSelec
           <LayersIcon className="w-2.5 h-2.5" />
           <span>{component.anatomy.callers?.length || 0} callers</span>
         </span>
+        <TestBadge testSummary={component.testSummary} />
+        <WasteBadge wasteMetrics={component.wasteMetrics} />
       </div>
 
       {/* Files Modified Hover Tracker */}

@@ -39,12 +39,57 @@ export interface GapItem {
   resolutionNote?: string;
 }
 
+export interface TestCaseInfo {
+  name: string;
+  suite: string;
+}
+
+export interface TestFileInfo {
+  path: string;
+  testCount: number;
+  suites: string[];
+  testCases: TestCaseInfo[];
+}
+
+export interface TestCoverageSummary {
+  testFilesCount: number;
+  totalTests: number;
+  status: 'tested' | 'partial' | 'untested';
+  coverageEstimatePercent: number;
+}
+
+export interface AstMetrics {
+  totalFunctions: number;
+  totalClasses: number;
+  totalInterfaces: number;
+  totalExports: number;
+  linesOfCode: number;
+}
+
 export interface ComponentAnatomy {
   members: DataMember[];
   functions: FunctionSpec[];
   state: StateItem[];
   callers: string[]; // Component IDs or external callers (e.g., 'User CLI', 'Agent CLI')
   callees: string[]; // Component IDs that this component calls
+}
+
+export interface DuplicateCodeItem {
+  name: string;
+  sourceFile: string;
+  duplicateOfFile: string;
+  similarity: number; // e.g. 0.85 - 1.0
+  reason: string;
+}
+
+export interface WasteMetrics {
+  unusedExports: string[];
+  deadCodeLines: number;
+  duplicateFunctions: DuplicateCodeItem[];
+  orphanFiles: string[];
+  testZombies: string[]; // only referenced in tests, uncalled in production
+  cleanlinessScore: number; // 0 - 100%
+  recommendation: 'prune' | 'investigate' | 'clean';
 }
 
 export interface ArchitectureComponent {
@@ -58,6 +103,10 @@ export interface ArchitectureComponent {
   progress: number; // 0 - 100%
   anatomy: ComponentAnatomy;
   files: FileChange[];
+  testFiles?: TestFileInfo[];
+  testSummary?: TestCoverageSummary;
+  astMetrics?: AstMetrics;
+  wasteMetrics?: WasteMetrics;
   gaps: GapItem[];
   updatedAt: string;
 }
@@ -89,4 +138,11 @@ export interface TimelineEvent {
   componentId?: string;
   title: string;
   description: string;
+}
+
+export interface GraphEdge {
+  id: string;
+  source: string; // caller component id
+  target: string; // callee component id
+  label?: string;
 }

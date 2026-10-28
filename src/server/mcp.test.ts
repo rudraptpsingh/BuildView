@@ -78,5 +78,11 @@ describe('BuildView MCP Server Protocol Suite', () => {
     const resolved = store.resolveGap('worker_pool', gap!.id, 'Added bounded channel queue');
     expect(resolved).toBe(true);
     expect(store.getProject().components[0].gaps[0].resolved).toBe(true);
+
+    // 7. Verify prompt context retrieval
+    const project = store.getProject();
+    const targetComp = project.components.find((c) => c.id === 'worker_pool');
+    expect(targetComp).toBeDefined();
+    expect(targetComp?.anatomy.functions[0].name).toBe('spawn');
   });
 });

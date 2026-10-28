@@ -262,5 +262,136 @@ export function createBuildViewMcpServer(store: BuildViewStore) {
     }
   );
 
+  // Tool 8: Deep Parse Repository AST & Detect Tests & Code Waste
+  server.tool(
+    'buildview_parse_repo',
+    'Deep scans a target repository using the TypeScript AST parser, extracting interfaces, functions, callers/callees, test coverage, and detecting dead/duplicate code for pruning',
+    {
+      repoPath: z.string().describe('Absolute directory path of the repository to parse'),
+    },
+    async (args) => {
+      const { RepoParser } = await import('./parser/repo-parser.js');
+      const { WasteDetector } = await import('./parser/waste-detector.js');
+
+      const scanResult = RepoParser.scanRepository(args.repoPath);
+      const wasteResult = WasteDetector.analyzeRepository(scanResult.sourceFiles, scanResult.testFiles);
+
+      const totalSourceFiles = scanResult.sourceFiles.length;
+      const totalTestFiles = scanResult.testFiles.length;
+      const totalTestCases = scanResult.testFiles.reduce((acc, tf) => acc + (tf.testCases?.length || 0), 0);
+      const totalUnusedExports = wasteResult.allUnusedExports.length;
+      const totalDuplicates = wasteResult.allDuplicates.length;
+      const totalTestZombies = wasteResult.allTestZombies.length;
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `# Repository Parse & Waste Audit: ${args.repoPath}`,
+              `- Source files analyzed: ${totalSourceFiles}`,
+              `- Test files analyzed: ${totalTestFiles}`,
+              `- Test cases detected: ${totalTestCases}`,
+              `- Unused exports (prune candidates): ${totalUnusedExports}`,
+              `- Duplicate implementations detected: ${totalDuplicates}`,
+              `- Test zombies (only called by tests): ${totalTestZombies}`,
+              `- Repository Cleanliness Score: ${wasteResult.repoWaste.cleanlinessScore}% (${wasteResult.repoWaste.recommendation.toUpperCase()})`,
+            ].join('\n'),
+          },
+        ],
+      };
+    }
+  );
+
+  // Tool 9: Get Structured Component Context for Coding Agent Prompts
+  server.tool(
+    'buildview_get_component_context',
+    'Get full prompt-ready architectural specification for a component (API contract, tests to pass, caller/callee links, files, gaps, and waste code to prune)',
+    {
+      componentId: z.string().describe('Component ID to retrieve context for'),
+    },
+    async (args) => {
+      const project = store.getProject();
+      const comp = project.components.find((c) => c.id === args.componentId);
+      if (!comp) {
+        return {
+          content: [{ type: 'text', text: `Error: Component "${args.componentId}" not found.` }],
+        };
+      }
+
+      const layer = project.layers.find((l) => l.id === comp.layerId);
+      const testCasesList = (comp.testFiles || []).flatMap((tf) => tf.testCases.map((tc) => `- [${tf.path}] (${tc.suite}): ${tc.name}`));
+
+      const contextMarkdown = [
+        `# Architecture Component: ${comp.name} (\`${comp.id}\`)`,
+        `**Layer:** ${layer?.name || comp.layerId} (Priority P${comp.priority})`,
+        `**Status:** ${comp.status.toUpperCase()} (${comp.progress}% progress)`,
+        `**Description:** ${comp.description}`,
+        '',
+        '## 1. API Contract & Public Anatomy',
+        '### Functions & Methods:',
+        ...(comp.anatomy.functions.length > 0
+          ? comp.anatomy.functions.map((f) => `- \`${f.name}${f.signature}\`: ${f.description || 'No doc'} (Returns: \`${f.returnType}\`, Async: ${!!f.isAsync})`)
+          : ['- None defined.']),
+        '',
+        '### Members & Fields:',
+        ...(comp.anatomy.members.length > 0
+          ? comp.anatomy.members.map((m) => `- \`[${m.access || 'public'}] ${m.name}: ${m.type}\`${m.description ? ` - ${m.description}` : ''}`)
+          : ['- None defined.']),
+        '',
+        '### Internal State:',
+        ...(comp.anatomy.state.length > 0
+          ? comp.anatomy.state.map((s) => `- \`${s.name}: ${s.type}\` (Initial: \`${s.initialValue}\`)`)
+          : ['- Stateless.']),
+        '',
+        '## 2. Test Verification Requirements',
+        `**Test Status:** ${comp.testSummary?.status?.toUpperCase() || 'UNTESTED'} (${comp.testSummary?.totalTests || 0} tests across ${comp.testFiles?.length || 0} test files)`,
+        ...(testCasesList.length > 0 ? testCasesList : ['- No test cases recorded yet. Coding agent must write tests to satisfy contract.']),
+        '',
+        '## 3. Dependency Graph Contracts',
+        `**Incoming Callers:** ${comp.anatomy.callers.join(', ') || 'None (Entrypoint/Interface)'}`,
+        `**Outbound Dependencies (Callees):** ${comp.anatomy.callees.join(', ') || 'None (Leaf)'}`,
+        '',
+        '## 4. Tracked Implementation Files',
+        ...comp.files.map((f) => `- \`${f.path}\` (${f.status.toUpperCase()}) ${f.description || ''}`),
+        '',
+        '## 5. Active Architectural Gaps',
+        ...(comp.gaps.length > 0
+          ? comp.gaps.map((g) => `- [${g.severity.toUpperCase()}] ${g.title}: ${g.description} (Resolved: ${g.resolved})`)
+          : ['- Zero active gaps reported.']),
+        '',
+        '## 6. Code Waste & Pruning Action Items',
+        `**Cleanliness Score:** ${comp.wasteMetrics?.cleanlinessScore ?? 100}% (${comp.wasteMetrics?.recommendation?.toUpperCase() || 'CLEAN'})`,
+        ...(comp.wasteMetrics?.unusedExports && comp.wasteMetrics.unusedExports.length > 0
+          ? [
+              '### Unused / Dead Exports to Prune:',
+              ...comp.wasteMetrics.unusedExports.map((u) => `- [PRUNE] \`${u}\``),
+            ]
+          : []),
+        ...(comp.wasteMetrics?.duplicateFunctions && comp.wasteMetrics.duplicateFunctions.length > 0
+          ? [
+              '### Duplicate Functions to Consolidate:',
+              ...comp.wasteMetrics.duplicateFunctions.map((d) => `- [CONSOLIDATE] \`${d.name}()\` in \`${d.sourceFile}\` (Duplicate of \`${d.duplicateOfFile}\`)`),
+            ]
+          : []),
+        ...(comp.wasteMetrics?.testZombies && comp.wasteMetrics.testZombies.length > 0
+          ? [
+              '### Test Zombies (Called only by tests, dead in prod):',
+              ...comp.wasteMetrics.testZombies.map((z) => `- [INVESTIGATE] \`${z}\``),
+            ]
+          : []),
+      ].join('\n');
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: contextMarkdown,
+          },
+        ],
+      };
+    }
+  );
+
   return server;
 }
