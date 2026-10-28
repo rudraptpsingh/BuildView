@@ -10,7 +10,8 @@
     "dev:client": "vite",
     "build": "vite build",
     "mcp": "tsx src/server/mcp-standalone.ts",
-    "example:simulate": "tsx src/examples/simulate-cli.ts"
+    "example:simulate": "tsx src/examples/simulate-cli.ts",
+    "scan:shotselect": "tsx src/examples/scan-shotselect.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

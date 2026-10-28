@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, SkipForward, RotateCcw, Cpu, Layers } from 'lucide-react';
+import { Play, Pause, SkipForward, RotateCcw, Cpu, Layers, Camera, AlertTriangle } from 'lucide-react';
 import { SimulationStep } from '@server/demo-data.js';
 
 interface SimulationControlsProps {
@@ -10,8 +10,9 @@ interface SimulationControlsProps {
   onTogglePlay: () => void;
   onNextStep: () => void;
   onReset: () => void;
-  activeProjectMode: 'demo' | 'dogfood';
-  onSwitchMode: (mode: 'demo' | 'dogfood') => void;
+  activeProjectMode: 'demo' | 'dogfood' | 'shotselect';
+  onSwitchMode: (mode: 'demo' | 'dogfood' | 'shotselect') => void;
+  activeGapsCount: number;
 }
 
 export const SimulationControls: React.FC<SimulationControlsProps> = ({
@@ -24,27 +25,38 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
   onReset,
   activeProjectMode,
   onSwitchMode,
+  activeGapsCount,
 }) => {
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-11/12 max-w-4xl">
       <div className="p-2.5 rounded-xl neu-surface hairline-t shadow-2xl backdrop-blur-md">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Left: Segmented Tabs (from AgentMonitor kit) */}
+          {/* Left: Segmented Tabs (AgentMonitor style) */}
           <div className="flex items-center space-x-2 font-mono">
             <div className="segmented-tabs">
               <button
                 onClick={() => onSwitchMode('dogfood')}
                 className={`segmented-tab ${activeProjectMode === 'dogfood' ? 'active' : ''}`}
+                title="Visualizes BuildView's own architecture"
               >
                 <Cpu className="w-3 h-3" />
                 <span>BUILDVIEW DOGFOOD</span>
               </button>
               <button
+                onClick={() => onSwitchMode('shotselect')}
+                className={`segmented-tab ${activeProjectMode === 'shotselect' ? 'active' : ''}`}
+                title="Visualizes ShotSelect production Electron desktop app"
+              >
+                <Camera className="w-3 h-3 text-emerald-500" />
+                <span>SHOTSELECT DESKTOP</span>
+              </button>
+              <button
                 onClick={() => onSwitchMode('demo')}
                 className={`segmented-tab ${activeProjectMode === 'demo' ? 'active' : ''}`}
+                title="Step-by-step CLI tool execution simulation"
               >
                 <Layers className="w-3 h-3" />
-                <span>CLI PILOT DEMO</span>
+                <span>CLI PILOT</span>
               </button>
             </div>
 
@@ -55,8 +67,8 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
             )}
           </div>
 
-          {/* Center: Phase description */}
-          {activeProjectMode === 'demo' && currentStep && (
+          {/* Center: Phase description / Status */}
+          {activeProjectMode === 'demo' && currentStep ? (
             <div className="flex-1 min-w-0 px-2 font-mono">
               <div className="flex items-center space-x-1.5 text-xs">
                 <span className="pill blue text-[9px] py-0">
@@ -70,7 +82,12 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                 {currentStep.description}
               </p>
             </div>
-          )}
+          ) : activeProjectMode === 'shotselect' ? (
+            <div className="flex-1 min-w-0 px-2 font-mono text-xs truncate">
+              <span className="text-[var(--text-tertiary)] text-[10px]">REPO:</span>{' '}
+              <span className="text-[var(--text-primary)] font-bold text-[11px]">shotselect-pr769 (22 files verified)</span>
+            </div>
+          ) : null}
 
           {/* Right: Action Group */}
           {activeProjectMode === 'demo' ? (
@@ -100,6 +117,17 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
               >
                 <RotateCcw className="w-3 h-3" />
               </button>
+            </div>
+          ) : activeProjectMode === 'shotselect' ? (
+            <div className="flex items-center space-x-2 font-mono">
+              {activeGapsCount > 0 ? (
+                <span className="pill danger font-bold flex items-center space-x-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  <span>XMP WRITE GAP DETECTED</span>
+                </span>
+              ) : (
+                <span className="pill green">VERIFIED</span>
+              )}
             </div>
           ) : (
             <div className="flex items-center space-x-2 text-xs font-mono pill green">

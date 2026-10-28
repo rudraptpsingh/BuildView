@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import { BuildViewProject, ArchitectureComponent } from '@shared/types.js';
 import { getCliDemoProject, getCliDemoSteps, SimulationStep } from '@server/demo-data.js';
 import { getDogfoodProject } from '@server/dogfood-data.js';
+import { getShotSelectProject } from '@server/shotselect-data.js';
 import { Header } from './components/Header.js';
 import { RoadmapBanner } from './components/RoadmapBanner.js';
 import { LayerLane } from './components/LayerLane.js';
@@ -12,8 +13,8 @@ import { GapsModal } from './components/GapsModal.js';
 
 export const App: React.FC = () => {
   const [isDark, setIsDark] = useState<boolean>(false);
-  const [activeMode, setActiveMode] = useState<'dogfood' | 'demo'>('dogfood');
-  const [project, setProject] = useState<BuildViewProject>(() => getDogfoodProject());
+  const [activeMode, setActiveMode] = useState<'dogfood' | 'shotselect' | 'demo'>('shotselect');
+  const [project, setProject] = useState<BuildViewProject>(() => getShotSelectProject());
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [isGapsModalOpen, setIsGapsModalOpen] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -63,13 +64,16 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Switch between Dogfood and Demo projects
-  const handleSwitchMode = (mode: 'dogfood' | 'demo') => {
+  // Switch between ShotSelect, Dogfood, and Demo projects
+  const handleSwitchMode = (mode: 'dogfood' | 'shotselect' | 'demo') => {
     setActiveMode(mode);
     setIsPlaying(false);
     if (timerRef.current) clearInterval(timerRef.current);
 
-    if (mode === 'dogfood') {
+    if (mode === 'shotselect') {
+      setProject(getShotSelectProject());
+      setSimStepIndex(0);
+    } else if (mode === 'dogfood') {
       setProject(getDogfoodProject());
       setSimStepIndex(0);
     } else {
@@ -287,6 +291,7 @@ export const App: React.FC = () => {
         onReset={() => handleReset('demo')}
         activeProjectMode={activeMode}
         onSwitchMode={handleSwitchMode}
+        activeGapsCount={activeGapsCount}
       />
     </div>
   );

@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import { BuildViewStore } from './store.js';
 import { getCliDemoProject, getCliDemoSteps } from './demo-data.js';
+import { getDogfoodProject } from './dogfood-data.js';
+import { getShotSelectProject } from './shotselect-data.js';
 
 export function createApiRouter(store: BuildViewStore) {
   const router = express.Router();
@@ -55,10 +57,16 @@ export function createApiRouter(store: BuildViewStore) {
     });
   });
 
-  // POST /api/reset - Reset to clean or demo state
+  // POST /api/reset - Switch active project
   router.post('/reset', (req, res) => {
     const { mode } = req.body || {};
-    if (mode === 'demo') {
+    if (mode === 'shotselect') {
+      const ssProject = getShotSelectProject();
+      store.resetProject(ssProject);
+    } else if (mode === 'dogfood') {
+      const dogfoodProject = getDogfoodProject();
+      store.resetProject(dogfoodProject);
+    } else if (mode === 'demo') {
       const demoProject = getCliDemoProject();
       store.resetProject(demoProject);
     } else {

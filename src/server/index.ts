@@ -28,7 +28,7 @@ async function bootstrap() {
   const clientDist = path.resolve(__dirname, '../../dist');
   if (fs.existsSync(clientDist)) {
     app.use(express.static(clientDist));
-    app.get('*', (req, res, next) => {
+    app.use((req, res, next) => {
       if (req.path.startsWith('/api')) return next();
       res.sendFile(path.join(clientDist, 'index.html'));
     });
