@@ -40,51 +40,33 @@ async function scanAndMapShotSelect() {
   let totalLinesScanned = 0;
   let complianceErrors = 0;
 
+  // 3. Cluster ALL repository files into full architecture components
+  console.log('🧩 Clustering all repository files into architectural components...');
+  const { ArchitectureClusterer } = await import('../server/parser/architecture-clusterer.js');
+  const allComponents = ArchitectureClusterer.clusterRepository(
+    repoScan.sourceFiles,
+    repoScan.testFiles,
+    project.layers,
+    undefined,
+    wasteAnalysis
+  );
+
+  project.components = allComponents;
+
   for (const component of project.components) {
-    // Verify token compliance
     const compliance = TokenEngine.validateCompliance(component);
     if (!compliance.valid) {
       console.warn(`⚠️ Compliance warning on ${component.id}:`, compliance.errors);
       complianceErrors++;
     }
 
-    // Scan physical files in the target repository
-    const componentFilePaths: string[] = [];
-    for (const file of component.files) {
-      const fullPath = path.join(SHOTSELECT_REPO_PATH, file.path);
-      if (fs.existsSync(fullPath)) {
-        const stats = fs.statSync(fullPath);
-        if (stats.isFile()) {
-          const content = fs.readFileSync(fullPath, 'utf-8');
-          const lines = content.split('\n').length;
-          file.linesChanged = lines;
-          file.status = 'created';
-          verifiedFilesCount++;
-          totalLinesScanned += lines;
-          componentFilePaths.push(file.path);
-        }
-      } else {
-        file.status = 'planned';
-      }
-    }
-
-    // Correlate live AST tests
-    const testMatch = RepoParser.correlateTests(componentFilePaths, repoScan.testFiles);
-    if (testMatch.matchedTestFiles.length > 0) {
-      component.testFiles = testMatch.matchedTestFiles;
-      component.testSummary = testMatch.testSummary;
-    }
-
-    // Correlate live Waste metrics
-    const compWaste = WasteDetector.getComponentWaste(componentFilePaths, wasteAnalysis.fileWaste);
-    if (compWaste.unusedExports.length > 0 || compWaste.duplicateFunctions.length > 0) {
-      component.wasteMetrics = compWaste;
-    }
+    verifiedFilesCount += component.files.length;
+    totalLinesScanned += component.astMetrics?.linesOfCode || 0;
 
     console.log(`✓ [${component.id}] ${component.name}: ${component.files.length} files | ${component.testSummary?.totalTests || 0} tests | waste: ${component.wasteMetrics?.recommendation || 'clean'}`);
   }
 
-  // Save the verified mapped architecture into the store
+  // Save the full clustered architecture into the store
   store.resetProject(project);
 
   console.log('\n======================================================');

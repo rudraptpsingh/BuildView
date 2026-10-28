@@ -366,20 +366,41 @@ export class RepoParser {
   } {
     const matchedTestFiles: TestFileInfo[] = [];
     const sourceBasenames = sourceFiles.map((f) => path.basename(f, path.extname(f)).toLowerCase());
+    const sourceSet = new Set(sourceFiles.map((f) => f.replace(/\\/g, '/')));
 
     for (const testResult of testFilesData) {
       const testBasename = path.basename(testResult.filePath, path.extname(testResult.filePath)).toLowerCase();
+      const cleanTest = testBasename.replace(/\.(test|spec)$/, '');
 
-      // Check if test file basename matches or is prefixed by any source file basename
-      const isMatch = sourceBasenames.some((srcBase) => {
-        const cleanTest = testBasename.replace(/\.(test|spec)$/, '');
-        return cleanTest === srcBase || cleanTest.startsWith(srcBase) || srcBase.includes(cleanTest);
+      // 1. Basename matching
+      let isMatch = sourceBasenames.some((srcBase) => {
+        return cleanTest === srcBase || cleanTest.startsWith(srcBase) || srcBase.startsWith(cleanTest);
       });
+
+      // 2. Import matching (if test directly imports source file)
+      if (!isMatch && testResult.imports) {
+        isMatch = testResult.imports.some((imp) => {
+          const impBase = path.basename(imp).replace(/\.(ts|tsx|js|jsx)$/, '').toLowerCase();
+          return sourceBasenames.includes(impBase);
+        });
+      }
+
+      // 3. Submodule directory proximity matching (only for specific subdirectories, e.g. components/cull, components/compare)
+      if (!isMatch) {
+        const testDir = path.dirname(testResult.filePath).toLowerCase();
+        isMatch = sourceFiles.some((sf) => {
+          const srcDir = path.dirname(sf).toLowerCase();
+          const srcSegments = srcDir.split(/[\\/]/).filter((s) => s && s !== 'src' && s !== 'electron' && s !== 'components');
+          if (srcSegments.length === 0) return false;
+          const specificDir = srcSegments.join('/');
+          return testDir.includes(specificDir);
+        });
+      }
 
       if (isMatch) {
         matchedTestFiles.push({
           path: testResult.filePath,
-          testCount: testResult.testCases?.length || 0,
+          testCount: testResult.testCases?.length || 1, // at least 1 test spec if file exists
           suites: testResult.testSuites || [],
           testCases: testResult.testCases || [],
         });
@@ -393,12 +414,12 @@ export class RepoParser {
     let coverageEstimatePercent = 0;
 
     if (testFilesCount > 0 && totalTests > 0) {
-      if (testFilesCount >= sourceFiles.length) {
+      if (testFilesCount >= Math.min(3, sourceFiles.length)) {
         status = 'tested';
-        coverageEstimatePercent = Math.min(100, Math.max(60, totalTests * 15));
+        coverageEstimatePercent = Math.min(100, Math.max(65, totalTests * 8));
       } else {
         status = 'partial';
-        coverageEstimatePercent = Math.min(80, Math.max(30, totalTests * 10));
+        coverageEstimatePercent = Math.min(75, Math.max(30, totalTests * 6));
       }
     }
 

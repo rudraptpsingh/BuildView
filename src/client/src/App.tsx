@@ -36,8 +36,19 @@ export const App: React.FC = () => {
     }
   }, [isDark]);
 
-  // Connect to SSE stream for real-time updates from MCP / API
+  // Connect to SSE stream and fetch initial project state from API
   useEffect(() => {
+    // 1. Fetch current persisted project state immediately
+    fetch('/api/project')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.components && data.components.length > 0) {
+          setProject(data);
+        }
+      })
+      .catch((e) => console.warn('Failed to fetch initial project state', e));
+
+    // 2. Connect to SSE stream for real-time updates from MCP / API
     let es: EventSource | null = null;
     try {
       es = new EventSource('/api/events');
@@ -73,7 +84,16 @@ export const App: React.FC = () => {
     if (timerRef.current) clearInterval(timerRef.current);
 
     if (mode === 'shotselect') {
-      setProject(getShotSelectProject());
+      fetch('/api/project')
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && data.components && data.components.length > 0) {
+            setProject(data);
+          } else {
+            setProject(getShotSelectProject());
+          }
+        })
+        .catch(() => setProject(getShotSelectProject()));
       setSimStepIndex(0);
     } else if (mode === 'dogfood') {
       setProject(getDogfoodProject());

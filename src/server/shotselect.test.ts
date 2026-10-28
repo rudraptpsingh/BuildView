@@ -12,9 +12,9 @@ describe('ShotSelect Architecture Mapping Suite', () => {
     expect(layers[3].id).toBe('layer_3_studio_ui');
   });
 
-  it('should map 10 core components with valid priorities and API anatomies', () => {
+  it('should map all 24 architectural components with valid priorities and API anatomies', () => {
     const components = getShotSelectComponents();
-    expect(components).toHaveLength(10);
+    expect(components).toHaveLength(24);
 
     // Verify all components have valid priority ordering
     for (let i = 0; i < components.length; i++) {
