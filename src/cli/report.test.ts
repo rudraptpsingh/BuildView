@@ -84,6 +84,13 @@ describe('check --json (end to end)', () => {
       env: { ...process.env, BUILDVIEW_PORT: '' },
     });
 
+  it('leaves the working directory untouched (no artifact, no .buildview state)', () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'bv-cwd-'));
+    spawnSync(process.execPath, [tsxCli, cli, 'check', fixture, '--json', '--no-write'], { cwd, encoding: 'utf-8' });
+    expect(fs.readdirSync(cwd)).toEqual([]);
+    expect(fs.existsSync(path.join(fixture, 'buildview-architecture.json'))).toBe(false);
+  }, 20000);
+
   it('prints only a JSON report and exits 1 when gaps fail', () => {
     const res = run();
     const report = JSON.parse(res.stdout);

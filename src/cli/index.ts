@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import os from 'os';
 import path from 'path';
 import { BuildViewStore } from '../server/store.js';
 import { RepoScannerService } from '../server/repo-scanner-service.js';
@@ -74,7 +75,8 @@ async function run() {
   log(`🎯 Mode: ${command.toUpperCase()}`);
   log('======================================================\n');
 
-  const store = new BuildViewStore();
+  // check is read-only: keep the store's state file out of the working directory.
+  const store = new BuildViewStore(command === 'check' ? path.join(os.tmpdir(), 'buildview-check-store') : undefined);
   const startTime = Date.now();
 
   try {
