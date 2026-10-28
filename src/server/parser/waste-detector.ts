@@ -69,6 +69,21 @@ export class WasteDetector {
     const allFiles = [...sourceFiles, ...testFiles];
     const fileWaste = new Map<string, WasteMetrics>();
 
+    // Pre-index source files for O(1) import resolution
+    const fileByNormalizedNoExt = new Map<string, string>();
+    const fileByBasenameNoExt = new Map<string, string[]>();
+
+    for (const target of sourceFiles) {
+      const norm = target.filePath.replace(/\\/g, '/');
+      const noExt = norm.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, '');
+      fileByNormalizedNoExt.set(noExt, target.filePath);
+
+      const base = path.basename(norm).replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, '');
+      const existing = fileByBasenameNoExt.get(base) || [];
+      existing.push(target.filePath);
+      fileByBasenameNoExt.set(base, existing);
+    }
+
     // 1. Collect all exported symbols
     const allExports: ExportedSymbolDetail[] = [];
     for (const file of sourceFiles) {
@@ -90,6 +105,7 @@ export class WasteDetector {
     for (const file of allFiles) {
       const details = file.importDetails || [];
       const isTest = file.isTestFile;
+      const fileDir = path.dirname(file.filePath).replace(/\\/g, '/');
 
       for (const imp of details) {
         for (const sym of imp.importedSymbols) {
@@ -100,13 +116,26 @@ export class WasteDetector {
           targetUsageMap.get(sym)!.add(file.filePath);
         }
 
-        // Check which file this import points to
-        for (const target of sourceFiles) {
-          if (this.matchesImport(file.filePath, imp.specifier, target.filePath)) {
-            if (!incomingFileImports.has(target.filePath)) {
-              incomingFileImports.set(target.filePath, new Set());
+        // Fast O(1) resolution:
+        if (imp.specifier.startsWith('.')) {
+          const resolved = path.normalize(path.join(fileDir, imp.specifier)).replace(/\\/g, '/');
+          const targetPath = fileByNormalizedNoExt.get(resolved) || fileByNormalizedNoExt.get(`${resolved}/index`);
+          if (targetPath) {
+            if (!incomingFileImports.has(targetPath)) {
+              incomingFileImports.set(targetPath, new Set());
             }
-            incomingFileImports.get(target.filePath)!.add(file.filePath);
+            incomingFileImports.get(targetPath)!.add(file.filePath);
+          }
+        } else {
+          const base = path.basename(imp.specifier);
+          const targets = fileByBasenameNoExt.get(base);
+          if (targets) {
+            for (const t of targets) {
+              if (!incomingFileImports.has(t)) {
+                incomingFileImports.set(t, new Set());
+              }
+              incomingFileImports.get(t)!.add(file.filePath);
+            }
           }
         }
       }

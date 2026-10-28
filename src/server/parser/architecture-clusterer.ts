@@ -580,16 +580,7 @@ export class ArchitectureClusterer {
     layers: ArchitectureLayer[] = ArchitectureClusterer.DEFAULT_UNIVERSAL_LAYERS,
     wasteResult?: WasteAnalysisResult
   ): ArchitectureComponent[] {
-    // Check if repository matches predefined studio desktop rules
-    const matchesStudioDesktop = sourceFiles.some((sf) =>
-      /electron\/embeddedPreview|electron\/xmp|electron\/faceGrouping/.test(sf.filePath)
-    );
-
-    if (matchesStudioDesktop) {
-      return this.clusterRepository(sourceFiles, testFiles, layers, STUDIO_DESKTOP_CLUSTER_RULES, wasteResult);
-    }
-
-    // Generic Clustering Engine for ANY repository
+    // Generic Dynamic Clustering Engine for ANY repository
     const moduleMap = new Map<string, ParsedFileResult[]>();
 
     for (const sf of sourceFiles) {
@@ -597,11 +588,14 @@ export class ArchitectureClusterer {
       const parts = normalized.split('/').filter(Boolean);
 
       let moduleKey = 'root';
-      if (parts.length > 2) {
-        // e.g. src/components/button.tsx -> src/components
-        // e.g. packages/core/src/index.ts -> packages/core
-        if (parts[0] === 'packages' || parts[0] === 'apps') {
-          moduleKey = `${parts[0]}/${parts[1]}`;
+      if (parts.length >= 3) {
+        // e.g. src/components/primitives/Button.tsx -> src/components/primitives
+        // e.g. electron/db/schema.ts -> electron/db
+        if (
+          parts.length >= 4 &&
+          /components|services|modules|pages|views|features|domain|api|store|workers|scripts/.test(parts[1].toLowerCase())
+        ) {
+          moduleKey = `${parts[0]}/${parts[1]}/${parts[2]}`;
         } else {
           moduleKey = `${parts[0]}/${parts[1]}`;
         }
@@ -808,6 +802,29 @@ export class ArchitectureClusterer {
           gaps: [],
           updatedAt: new Date().toISOString(),
         });
+      }
+    }
+
+    // --- Step 3: Populate Bi-directional Callers Map ---
+    const callerMap = new Map<string, Set<string>>();
+    for (const comp of components) {
+      for (const calleeId of comp.anatomy.callees) {
+        if (!callerMap.has(calleeId)) {
+          callerMap.set(calleeId, new Set());
+        }
+        callerMap.get(calleeId)!.add(comp.id);
+      }
+    }
+
+    for (const comp of components) {
+      const callers = callerMap.get(comp.id);
+      if (callers && callers.size > 0) {
+        comp.anatomy.callers = Array.from(callers);
+      } else if (comp.anatomy.callers.length === 0) {
+        comp.anatomy.callers =
+          comp.layerId === 'layer_verification' || comp.layerId === 'layer_4_tests'
+            ? ['CI/CD Pipeline']
+            : ['Root Application'];
       }
     }
 

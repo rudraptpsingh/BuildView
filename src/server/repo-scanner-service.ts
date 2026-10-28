@@ -73,6 +73,46 @@ export class RepoScannerService {
     const ruleAnalysis = ArchitectureRulesEngine.analyzeArchitecture(components, layers);
     ArchitectureRulesEngine.attachRuleGapsToComponents(components, ruleAnalysis);
 
+    // 5. Dynamic FigBridge / Design System Integration (if figbridge.connect.json exists)
+    let figmaBridgeSummary: { fileKey?: string; totalMappedComponents: number } | undefined;
+    const figbridgePath = path.join(resolvedPath, 'figbridge.connect.json');
+    if (fs.existsSync(figbridgePath)) {
+      try {
+        const figData = JSON.parse(fs.readFileSync(figbridgePath, 'utf-8'));
+        const figmaItems = Array.isArray(figData.components) ? figData.components : [];
+        figmaBridgeSummary = {
+          fileKey: figData.fileKey,
+          totalMappedComponents: figmaItems.length,
+        };
+
+        // Correlate Figma mapped elements to actual codebase components
+        for (const item of figmaItems) {
+          const codeSource = item.code?.source;
+          if (!codeSource) continue;
+          const normSource = codeSource.replace(/\\/g, '/');
+
+          for (const comp of components) {
+            const match = comp.files.some((f) => {
+              const fNorm = f.path.replace(/\\/g, '/');
+              return fNorm === normSource || fNorm.endsWith(normSource) || normSource.endsWith(fNorm);
+            });
+
+            if (match) {
+              if (!comp.figmaComponents) comp.figmaComponents = [];
+              comp.figmaComponents.push({
+                name: item.figma?.name || 'Figma Component',
+                nodeId: item.figma?.nodeId || '',
+                source: codeSource,
+                exportName: item.code?.export,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        // Ignore invalid json
+      }
+    }
+
     const project: BuildViewProject = {
       id: `proj_${projectName.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`,
       name: projectName,
@@ -80,10 +120,19 @@ export class RepoScannerService {
       version: '1.0.0',
       layers,
       components,
+      figmaBridge: figmaBridgeSummary,
       lastUpdated: new Date().toISOString(),
     };
 
-    // 4. Reset project in store and broadcast to live visualizers
+    // 6. Write out architecture map JSON artifact in target repository for agent consumption
+    try {
+      const outputArtifactPath = path.join(resolvedPath, 'buildview-architecture.json');
+      fs.writeFileSync(outputArtifactPath, JSON.stringify(project, null, 2), 'utf-8');
+    } catch (err) {
+      // Non-fatal if target directory is read-only
+    }
+
+    // 7. Reset project in store and broadcast to live visualizers
     store.resetProject(project);
 
     return project;

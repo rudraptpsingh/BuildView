@@ -56,7 +56,7 @@ export class RepoParser {
       path.basename(filePath),
       fileContent,
       ts.ScriptTarget.Latest,
-      true,
+      false,
       filePath.endsWith('.tsx') || filePath.endsWith('.jsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
     );
 
@@ -448,7 +448,45 @@ export class RepoParser {
     testFiles: ParsedFileResult[];
   } {
     const extFilter = options.includeExtensions || ['.ts', '.tsx', '.js', '.jsx', '.mjs'];
-    const ignoreDirs = new Set(options.ignoreDirs || ['node_modules', 'dist', '.git', '.buildview', 'build']);
+    const defaultIgnoreDirs = [
+      'node_modules',
+      'dist',
+      'dist-electron',
+      'dist-web',
+      '.git',
+      '.buildview',
+      'build',
+      'out',
+      'output',
+      'outputs',
+      'test-results',
+      'coverage',
+      '.cache',
+      '.turbo',
+      '.next',
+      '.tmp',
+      'tmp',
+      'tmp2',
+      'tmp3',
+      'tmp4',
+      '.playwright-cli',
+      '.shotselect-dev',
+      '.vscode',
+      '.idea',
+      'benchmarks',
+      'mockups',
+      'assets',
+      'videos',
+      'public',
+      'marketing',
+      'mock-wedding-dataset',
+      'test-fixtures',
+      'docs',
+      'captures',
+      'screenshots',
+      'artifacts',
+    ];
+    const ignoreDirs = new Set([...defaultIgnoreDirs, ...(options.ignoreDirs || [])]);
 
     const sourceFiles: ParsedFileResult[] = [];
     const testFiles: ParsedFileResult[] = [];
@@ -459,15 +497,19 @@ export class RepoParser {
 
       for (const entry of entries) {
         if (entry.isDirectory()) {
-          if (!ignoreDirs.has(entry.name)) {
-            traverse(path.join(currentDir, entry.name));
+          if (entry.name.startsWith('.') || ignoreDirs.has(entry.name)) {
+            continue;
           }
+          traverse(path.join(currentDir, entry.name));
         } else if (entry.isFile()) {
           const ext = path.extname(entry.name);
           if (extFilter.includes(ext)) {
             const fullPath = path.join(currentDir, entry.name);
             const relativePath = path.relative(rootDir, fullPath);
             try {
+              const stat = fs.statSync(fullPath);
+              if (stat.size > 1024 * 1024) continue; // skip files > 1MB
+
               const content = fs.readFileSync(fullPath, 'utf-8');
               const parsed = RepoParser.parseFile(relativePath, content);
               if (parsed.isTestFile) {

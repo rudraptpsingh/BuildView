@@ -21,6 +21,7 @@ import {
   RotateCcw,
   Move,
   Filter,
+  Palette,
 } from 'lucide-react';
 import { BuildViewProject, ArchitectureComponent } from '@shared/types.js';
 import { LAYER_ACCENTS } from '@shared/tokens.js';
@@ -433,23 +434,35 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
             )}
           </div>
 
-          <div className="flex items-center space-x-2 text-[10px] font-mono text-[var(--text-tertiary)] mt-0.5">
-            <span className="flex items-center space-x-0.5">
-              <FileCode className="w-2.5 h-2.5" />
-              <span>{comp.files.length}f</span>
-            </span>
-            <span>•</span>
-            <span className="flex items-center space-x-0.5 text-emerald-600 dark:text-emerald-400">
-              <TestTube className="w-2.5 h-2.5" />
-              <span>{comp.testSummary?.totalTests || 0}t</span>
-            </span>
-            <span>•</span>
-            <span className="font-semibold text-[var(--text-primary)]">{comp.progress}%</span>
+            <div className="flex items-center space-x-2 text-[10px] font-mono text-[var(--text-tertiary)] mt-0.5">
+              <span className="flex items-center space-x-0.5">
+                <FileCode className="w-2.5 h-2.5" />
+                <span>{comp.files.length}f</span>
+              </span>
+              <span>•</span>
+              <span className="flex items-center space-x-0.5 text-emerald-600 dark:text-emerald-400">
+                <TestTube className="w-2.5 h-2.5" />
+                <span>{comp.testSummary?.totalTests || 0}t</span>
+              </span>
+              <span>•</span>
+              <span className="font-semibold text-[var(--text-primary)]">{comp.progress}%</span>
+              {comp.figmaComponents && comp.figmaComponents.length > 0 && (
+                <>
+                  <span>•</span>
+                  <span
+                    className="flex items-center space-x-0.5 text-purple-400 font-bold"
+                    title={`${comp.figmaComponents.length} Figma design component(s) connected via FigBridge`}
+                  >
+                    <Palette className="w-2.5 h-2.5" />
+                    <span>{comp.figmaComponents.length}</span>
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    );
-  };
+      );
+    };
 
   return (
     <div className="flex flex-col space-y-3">
@@ -874,6 +887,23 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
                 <ArrowRight className="w-3 h-3" />
               </button>
             </div>
+
+            {/* FigBridge Design Connection if present */}
+            {activeComponent.figmaComponents && activeComponent.figmaComponents.length > 0 && (
+              <div className="mt-2.5 flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/30 text-[10px] font-mono text-purple-300">
+                <div className="flex items-center space-x-1.5 truncate mr-2">
+                  <Palette className="w-3 h-3 text-purple-400 shrink-0" />
+                  <span className="font-bold text-purple-400">FigBridge:</span>
+                  <span className="truncate text-[var(--text-secondary)]">
+                    {activeComponent.figmaComponents.map((f) => f.name).slice(0, 3).join(', ')}
+                    {activeComponent.figmaComponents.length > 3 ? ` +${activeComponent.figmaComponents.length - 3} more` : ''}
+                  </span>
+                </div>
+                <span className="pill purple text-[9px] font-bold shrink-0">
+                  {activeComponent.figmaComponents.length} MAPPED
+                </span>
+              </div>
+            )}
 
             {/* Quick Metrics Bar */}
             <div className="mt-3 pt-2.5 hairline-t flex flex-wrap items-center justify-between text-[10px] font-mono text-[var(--text-tertiary)]">

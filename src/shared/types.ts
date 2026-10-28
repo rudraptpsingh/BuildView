@@ -92,6 +92,13 @@ export interface WasteMetrics {
   recommendation: 'prune' | 'investigate' | 'clean';
 }
 
+export interface FigmaMappingInfo {
+  name: string;
+  nodeId: string;
+  source: string;
+  exportName?: string;
+}
+
 export interface ArchitectureComponent {
   id: string;
   name: string;
@@ -107,6 +114,7 @@ export interface ArchitectureComponent {
   testSummary?: TestCoverageSummary;
   astMetrics?: AstMetrics;
   wasteMetrics?: WasteMetrics;
+  figmaComponents?: FigmaMappingInfo[];
   gaps: GapItem[];
   updatedAt: string;
 }
@@ -126,6 +134,10 @@ export interface BuildViewProject {
   version: string;
   layers: ArchitectureLayer[];
   components: ArchitectureComponent[];
+  figmaBridge?: {
+    fileKey?: string;
+    totalMappedComponents: number;
+  };
   activeStep?: number;
   totalSteps?: number;
   lastUpdated: string;

@@ -5,3 +5,4 @@ dist
 .buildview_mcp_test
 .DS_Store
 *.log
+buildview-architecture.json

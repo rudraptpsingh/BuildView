@@ -33,6 +33,10 @@ async function main() {
     console.log(`🔢 Lines of Code Tracked: ${totalLines.toLocaleString()}`);
     console.log(`🧪 Tests Correlated: ${totalTests}`);
     console.log(`⚠️ Active Gaps: ${totalGaps}`);
+    if (project.figmaBridge) {
+      console.log(`🎨 FigBridge Mappings: ${project.figmaBridge.totalMappedComponents} Figma components linked`);
+    }
+    console.log(`💾 Architecture Artifact: ${path.join(resolvedTarget, 'buildview-architecture.json')}`);
     console.log(`👉 View live dashboard: http://localhost:5173`);
     console.log('======================================================\n');
   } catch (err: any) {
