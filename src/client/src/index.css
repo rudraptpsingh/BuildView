@@ -289,3 +289,14 @@ code, pre, .font-mono {
 .hairline-l {
   border-left: 1px solid var(--border-default);
 }
+
+/* Modern Dribbble-style dot grid background */
+.canvas-dot-grid {
+  background-image: radial-gradient(rgba(100, 116, 139, 0.22) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.dark .canvas-dot-grid {
+  background-image: radial-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px;
+}

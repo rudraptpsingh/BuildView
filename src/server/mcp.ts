@@ -1,12 +1,61 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { BuildViewStore } from './store.js';
+import { RepoScannerService } from './repo-scanner-service.js';
 
 export function createBuildViewMcpServer(store: BuildViewStore) {
   const server = new McpServer({
     name: 'BuildView',
     version: '1.0.0',
   });
+
+  // Tool 0: Dynamically Scan, Parse AST, and Map Any Arbitrary Codebase
+  server.tool(
+    'buildview_scan_repo',
+    'Scan ANY repository on disk, parse its AST, detect code waste, and generate live architecture component mapping',
+    {
+      repoPath: z.string().describe('Absolute or relative directory path of the codebase to scan and visualize (e.g. "." or "/path/to/repo")'),
+      projectName: z.string().optional().describe('Optional custom display name for the project'),
+      projectDescription: z.string().optional().describe('Optional custom architectural summary'),
+    },
+    async (args) => {
+      try {
+        const project = await RepoScannerService.scanRepository(store, args.repoPath, {
+          projectName: args.projectName,
+          projectDescription: args.projectDescription,
+        });
+
+        const totalFiles = project.components.reduce((sum, c) => sum + c.files.length, 0);
+        const totalTests = project.components.reduce((sum, c) => sum + (c.testSummary?.totalTests || 0), 0);
+        const totalGaps = project.components.reduce((sum, c) => sum + c.gaps.filter((g) => !g.resolved).length, 0);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ Successfully scanned and mapped repository "${project.name}":\n` +
+                `- Layers: ${project.layers.length}\n` +
+                `- Architectural Components: ${project.components.length}\n` +
+                `- Source Files Parsed: ${totalFiles}\n` +
+                `- Tests Correlated: ${totalTests}\n` +
+                `- Active Gaps: ${totalGaps}\n\n` +
+                `Visualizer updated in real-time at http://localhost:5173`,
+            },
+          ],
+        };
+      } catch (err: any) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Failed to scan repository at "${args.repoPath}": ${err.message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
 
   // Tool 1: Initialize Project & Architecture Layers
   server.tool(

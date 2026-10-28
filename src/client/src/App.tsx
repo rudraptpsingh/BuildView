@@ -12,15 +12,17 @@ import { GapsPruneTable } from './components/GapsPruneTable.js';
 import { ComponentDrawer } from './components/ComponentDrawer.js';
 import { SimulationControls } from './components/SimulationControls.js';
 import { GapsModal } from './components/GapsModal.js';
+import { ScanRepoModal } from './components/ScanRepoModal.js';
 
 export const App: React.FC = () => {
   const [isDark, setIsDark] = useState<boolean>(false);
-  const [activeMode, setActiveMode] = useState<'dogfood' | 'shotselect' | 'demo'>('shotselect');
+  const [activeMode, setActiveMode] = useState<'custom' | 'dogfood' | 'demo'>('custom');
   const [viewMode, setViewMode] = useState<'lanes' | 'graph' | 'table'>('lanes');
   const [project, setProject] = useState<BuildViewProject>(() => getShotSelectProject());
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [drawerInitialTab, setDrawerInitialTab] = useState<'anatomy' | 'graph' | 'files' | 'gaps' | 'tests' | 'waste' | undefined>(undefined);
   const [isGapsModalOpen, setIsGapsModalOpen] = useState<boolean>(false);
+  const [isScanModalOpen, setIsScanModalOpen] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
 
   // Simulation state for CLI Demo
@@ -79,23 +81,21 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Switch between ShotSelect, Dogfood, and Demo projects
-  const handleSwitchMode = (mode: 'dogfood' | 'shotselect' | 'demo') => {
+  // Switch between Custom Scanned Repo, Dogfood, and Demo projects
+  const handleSwitchMode = (mode: 'custom' | 'dogfood' | 'demo') => {
     setActiveMode(mode);
     setIsPlaying(false);
     if (timerRef.current) clearInterval(timerRef.current);
 
-    if (mode === 'shotselect') {
+    if (mode === 'custom') {
       fetch('/api/project')
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data && data.components && data.components.length > 0) {
             setProject(data);
-          } else {
-            setProject(getShotSelectProject());
           }
         })
-        .catch(() => setProject(getShotSelectProject()));
+        .catch(() => {});
       setSimStepIndex(0);
     } else if (mode === 'dogfood') {
       setProject(getDogfoodProject());
@@ -269,13 +269,14 @@ export const App: React.FC = () => {
         viewMode={viewMode}
         onToggleViewMode={setViewMode}
         onToggleTheme={() => setIsDark((prev) => !prev)}
-        onReset={handleReset}
-        onOpenGaps={() => setIsGapsModalOpen(true)}
+        activeProjectMode={activeMode}
+        onSwitchProjectMode={handleSwitchMode}
+        onOpenScanModal={() => setIsScanModalOpen(true)}
         activeGapsCount={activeGapsCount}
       />
 
       {/* Main Visualizer Container */}
-      <main className="max-w-7xl w-full mx-auto px-6 flex-1 space-y-8">
+      <main className="max-w-[1600px] w-full mx-auto px-4 flex-1 space-y-4">
         {/* AI Agent Roadmap Banner */}
         <RoadmapBanner
           nextFocus={nextFocus}
@@ -295,7 +296,7 @@ export const App: React.FC = () => {
             onSelectComponent={handleSelectComponent}
           />
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-6">
             {sortedLayers.map((layer) => {
               const compsInLayer = project.components.filter((c) => c.layerId === layer.id);
               return (
@@ -332,7 +333,17 @@ export const App: React.FC = () => {
         onSelectComponent={(id) => setSelectedComponentId(id)}
       />
 
-      {/* Interactive Bottom Simulation & Dogfood Controls */}
+      {/* Scan Any Repository Modal */}
+      <ScanRepoModal
+        isOpen={isScanModalOpen}
+        onClose={() => setIsScanModalOpen(false)}
+        onScanSuccess={(newProj) => {
+          setProject(newProj);
+          setActiveMode('custom');
+        }}
+      />
+
+      {/* Interactive Simulation Controls (Active only in Demo mode) */}
       <SimulationControls
         currentStepIndex={simStepIndex}
         totalSteps={demoSteps.length}
@@ -342,8 +353,6 @@ export const App: React.FC = () => {
         onNextStep={handleNextStep}
         onReset={() => handleReset('demo')}
         activeProjectMode={activeMode}
-        onSwitchMode={handleSwitchMode}
-        activeGapsCount={activeGapsCount}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { BuildViewStore } from './store.js';
+import { RepoScannerService } from './repo-scanner-service.js';
 import { getCliDemoProject, getCliDemoSteps } from './demo-data.js';
 import { getDogfoodProject } from './dogfood-data.js';
 import { getShotSelectProject } from './shotselect-data.js';
@@ -21,6 +22,24 @@ export function createApiRouter(store: BuildViewStore) {
       } catch (err) {
         // Handled on client close
       }
+    }
+  });
+
+  // POST /api/scan - Dynamically scan, parse, and map ANY repository on disk
+  router.post('/scan', async (req, res) => {
+    try {
+      const { repoPath, projectName, projectDescription } = req.body || {};
+      if (!repoPath) {
+        return res.status(400).json({ error: 'Missing required parameter "repoPath"' });
+      }
+      const project = await RepoScannerService.scanRepository(store, repoPath, {
+        projectName,
+        projectDescription,
+      });
+      res.json({ success: true, project });
+    } catch (err: any) {
+      console.error('Failed to scan repository:', err);
+      res.status(500).json({ error: err.message });
     }
   });
 

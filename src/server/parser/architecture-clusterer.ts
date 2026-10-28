@@ -439,4 +439,171 @@ export class ArchitectureClusterer {
 
     return components;
   }
+
+  /**
+   * Universal 4-Layer Taxonomy for any software codebase
+   */
+  public static readonly DEFAULT_UNIVERSAL_LAYERS: ArchitectureLayer[] = [
+    {
+      id: 'layer_foundation',
+      name: 'Storage, Native & Foundation',
+      order: 0,
+      description: 'Persistence, database models, schemas, native bindings, utilities, and core configuration.',
+      color: '#6366f1',
+    },
+    {
+      id: 'layer_domain',
+      name: 'Domain Engines & Services',
+      order: 1,
+      description: 'Core processing pipelines, algorithms, domain services, AI/ML models, and background workers.',
+      color: '#06b6d4',
+    },
+    {
+      id: 'layer_state_ipc',
+      name: 'State, Router & IPC Bridge',
+      order: 2,
+      description: 'State management stores, IPC/RPC channels, API routers, controllers, and policy coordinators.',
+      color: '#10b981',
+    },
+    {
+      id: 'layer_presentation',
+      name: 'Studio UI & Interface Panels',
+      order: 3,
+      description: 'User interface components, dashboards, tools, dialogs, CLI command routers, and presentation views.',
+      color: '#f43f5e',
+    },
+  ];
+
+  /**
+   * Automatically groups ANY arbitrary repository into cohesive architectural components
+   * based on directory structures, module boundaries, AST imports, and caller/callee graphs.
+   */
+  public static autoClusterRepository(
+    sourceFiles: ParsedFileResult[],
+    testFiles: ParsedFileResult[],
+    layers: ArchitectureLayer[] = ArchitectureClusterer.DEFAULT_UNIVERSAL_LAYERS,
+    wasteResult?: WasteAnalysisResult
+  ): ArchitectureComponent[] {
+    // Check if repository matches predefined ShotSelect rules
+    const matchesShotSelect = sourceFiles.some((sf) =>
+      /electron\/embeddedPreview|electron\/xmp|electron\/faceGrouping/.test(sf.filePath)
+    );
+
+    if (matchesShotSelect) {
+      return this.clusterRepository(sourceFiles, testFiles, layers, SHOTSELECT_CLUSTER_RULES, wasteResult);
+    }
+
+    // Generic Clustering Engine for ANY repository
+    const moduleMap = new Map<string, ParsedFileResult[]>();
+
+    for (const sf of sourceFiles) {
+      const normalized = sf.filePath.replace(/\\/g, '/');
+      const parts = normalized.split('/').filter(Boolean);
+
+      let moduleKey = 'root';
+      if (parts.length > 2) {
+        // e.g. src/components/button.tsx -> src/components
+        // e.g. packages/core/src/index.ts -> packages/core
+        if (parts[0] === 'packages' || parts[0] === 'apps') {
+          moduleKey = `${parts[0]}/${parts[1]}`;
+        } else {
+          moduleKey = `${parts[0]}/${parts[1]}`;
+        }
+      } else if (parts.length === 2) {
+        moduleKey = parts[0];
+      }
+
+      const existing = moduleMap.get(moduleKey) || [];
+      existing.push(sf);
+      moduleMap.set(moduleKey, existing);
+    }
+
+    const components: ArchitectureComponent[] = [];
+    let priorityCounter = 1;
+
+    for (const [moduleKey, files] of moduleMap.entries()) {
+      const componentPaths = files.map((f) => f.filePath);
+      const testMatch = RepoParser.correlateTests(componentPaths, testFiles);
+      const compWaste = wasteResult
+        ? WasteDetector.getComponentWaste(componentPaths, wasteResult.fileWaste)
+        : undefined;
+
+      // Classify layer from directory keywords
+      let layerId = 'layer_domain';
+      let color = 'blue';
+
+      const keyLower = moduleKey.toLowerCase();
+      if (/db|database|sqlite|sql|store|storage|models?|schemas?|native|fs|io|mount|config|foundation/.test(keyLower)) {
+        layerId = layers[0]?.id || 'layer_foundation';
+        color = 'blue';
+      } else if (/ai|ml|onnx|perception|vision|search|engine|service|pipeline|worker|algo|detector|analysis/.test(keyLower)) {
+        layerId = layers[1]?.id || 'layer_domain';
+        color = 'cyan';
+      } else if (/ipc|bridge|preload|router|controller|state|zustand|redux|middleware|hook|events?/.test(keyLower)) {
+        layerId = layers[2]?.id || 'layer_state_ipc';
+        color = 'emerald';
+      } else if (/component|ui|view|page|panel|dock|dialog|modal|screen|card|cli|command|presentation/.test(keyLower)) {
+        layerId = layers[3]?.id || 'layer_presentation';
+        color = 'rose';
+      }
+
+      // Format clean component name
+      const cleanName = moduleKey
+        .split('/')
+        .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+        .join(' ');
+
+      const compId = `comp_${moduleKey.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`;
+
+      // Deduce caller/callee links from imports across components
+      const callees = new Set<string>();
+      for (const f of files) {
+        for (const imp of f.imports || []) {
+          for (const [otherKey] of moduleMap.entries()) {
+            if (otherKey !== moduleKey && imp.includes(otherKey)) {
+              callees.add(`comp_${otherKey.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`);
+            }
+          }
+        }
+      }
+
+      components.push({
+        id: compId,
+        name: cleanName,
+        layerId,
+        priority: priorityCounter++,
+        description: `Architectural module covering ${files.length} file(s) in ${moduleKey}.`,
+        color,
+        status: 'completed',
+        progress: 100,
+        anatomy: {
+          members: files.flatMap((f) => f.members).slice(0, 8),
+          functions: files.flatMap((f) => f.functions).slice(0, 12),
+          state: [],
+          callers: [],
+          callees: Array.from(callees),
+        },
+        files: files.map((f) => ({
+          path: f.filePath,
+          status: 'created',
+          linesChanged: f.astMetrics.linesOfCode,
+          description: `${f.astMetrics.totalFunctions} fns, ${f.astMetrics.totalExports} exports`,
+        })),
+        testFiles: testMatch.matchedTestFiles,
+        testSummary: testMatch.testSummary,
+        astMetrics: {
+          totalFunctions: files.reduce((sum, f) => sum + f.astMetrics.totalFunctions, 0),
+          totalClasses: files.reduce((sum, f) => sum + f.astMetrics.totalClasses, 0),
+          totalInterfaces: files.reduce((sum, f) => sum + f.astMetrics.totalInterfaces, 0),
+          totalExports: files.reduce((sum, f) => sum + f.astMetrics.totalExports, 0),
+          linesOfCode: files.reduce((sum, f) => sum + f.astMetrics.linesOfCode, 0),
+        },
+        wasteMetrics: compWaste,
+        gaps: [],
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    return components;
+  }
 }
