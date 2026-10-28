@@ -20,135 +20,135 @@ export interface ComponentClusterRule {
   callees: string[];
 }
 
-export const SHOTSELECT_CLUSTER_RULES: ComponentClusterRule[] = [
+export const STUDIO_DESKTOP_CLUSTER_RULES: ComponentClusterRule[] = [
   // --- Layer 0: Native & Storage Core ---
   {
-    id: 'comp_ss_sqlite',
+    id: 'comp_studio_sqlite',
     name: 'SQLite Session Store & Migrations',
     layerId: 'layer_0_native_storage',
     priority: 1,
     description: 'Embedded fast persistence for photo culling sessions, ratings, metadata cache, and project workspaces.',
     color: 'blue',
     filePatterns: [/electron\/db\./, /electron\/projectWorkspace\./, /electron\/localActivityLog\./, /electron\/models\//],
-    callers: ['comp_ss_ipc', 'comp_ss_zustand'],
+    callers: ['comp_studio_ipc', 'comp_studio_zustand'],
     callees: ['better-sqlite3'],
   },
   {
-    id: 'comp_ss_raw_decoder',
+    id: 'comp_studio_raw_decoder',
     name: 'Fast RAW Preview & Embedded Decoder',
     layerId: 'layer_0_native_storage',
     priority: 2,
     description: 'Extracts embedded full-resolution JPEGs and burst thumbnails from CR2, CR3, NEF, ARW, and DNG camera files.',
     color: 'blue',
     filePatterns: [/electron\/embeddedPreview\./, /electron\/tiffPreview\./, /electron\/rawPreviewRevision\./, /electron\/fastRaw/, /native\//],
-    callers: ['comp_ss_photo_deck', 'comp_ss_compare_view', 'comp_ss_cull_inspector'],
+    callers: ['comp_studio_photo_deck', 'comp_studio_compare_view', 'comp_studio_cull_inspector'],
     callees: ['sharp', 'native/fast-raw-preview'],
   },
   {
-    id: 'comp_ss_xmp_engine',
+    id: 'comp_studio_xmp_engine',
     name: 'XMP Sidecar Sync Engine',
     layerId: 'layer_0_native_storage',
     priority: 3,
     description: 'Generates and reads Adobe XMP sidecar files for Lightroom, Capture One, and Bridge interoperability.',
     color: 'amber',
     filePatterns: [/electron\/exportRunner\./, /electron\/xmp/, /electron\/metadata/],
-    callers: ['comp_ss_export_panel'],
+    callers: ['comp_studio_export_panel'],
     callees: ['Node fs/promises', 'exiftool-vendored'],
   },
   {
-    id: 'comp_ss_mount_supervisor',
+    id: 'comp_studio_mount_supervisor',
     name: 'Volume & SD Card Mount Supervisor',
     layerId: 'layer_0_native_storage',
     priority: 4,
     description: 'Monitors macOS/Windows disk drive attachments, camera memory card insertions, and read-only flags.',
     color: 'blue',
     filePatterns: [/electron\/mountWatcher/, /electron\/diskSpace/, /electron\/io\//],
-    callers: ['comp_ss_import_panel', 'comp_ss_ipc'],
+    callers: ['comp_studio_import_panel', 'comp_studio_ipc'],
     callees: ['Node fs', 'diskusage'],
   },
   {
-    id: 'comp_ss_ipc',
+    id: 'comp_studio_ipc',
     name: 'Electron Preload & IPC Bridge',
     layerId: 'layer_0_native_storage',
     priority: 5,
     description: 'Type-safe bridge connecting the React renderer with Node.js main process, FS operations, and mounted devices.',
     color: 'blue',
     filePatterns: [/electron\/preload\./, /electron\/main\./, /electron\/ipc/],
-    callers: ['comp_ss_zustand', 'comp_ss_import_panel', 'comp_ss_photo_deck'],
-    callees: ['comp_ss_sqlite', 'comp_ss_raw_decoder'],
+    callers: ['comp_studio_zustand', 'comp_studio_import_panel', 'comp_studio_photo_deck'],
+    callees: ['comp_studio_sqlite', 'comp_studio_raw_decoder'],
   },
   {
-    id: 'comp_ss_cloud_sync',
+    id: 'comp_studio_cloud_sync',
     name: 'Cloud Backup & Client Link Engine',
     layerId: 'layer_0_native_storage',
     priority: 6,
     description: 'Cloud backup dispatcher, client delivery links, and remote sync services.',
     color: 'blue',
     filePatterns: [/electron\/cloudSync\//, /electron\/clientLinks\//, /electron\/collab\//, /src\/components\/BackupToCloud/],
-    callers: ['comp_ss_export_panel', 'comp_ss_delivery_board'],
-    callees: ['comp_ss_sqlite', 'comp_ss_ipc'],
+    callers: ['comp_studio_export_panel', 'comp_studio_delivery_board'],
+    callees: ['comp_studio_sqlite', 'comp_studio_ipc'],
   },
 
   // --- Layer 1: AI Perception & ML Inference ---
   {
-    id: 'comp_ss_onnx_pool',
+    id: 'comp_studio_onnx_pool',
     name: 'ONNX Multi-Worker Pipeline',
     layerId: 'layer_1_ai_ml',
     priority: 7,
     description: 'Zero-Python on-device ML models executing in dedicated Node worker threads for blur, faces, and semantic search.',
     color: 'green',
     filePatterns: [/scripts\/.*worker_node\.mjs/, /electron\/analysisPriorityQueue\./, /electron\/onnx/],
-    callers: ['comp_ss_zustand', 'comp_ss_cull_inspector'],
+    callers: ['comp_studio_zustand', 'comp_studio_cull_inspector'],
     callees: ['onnxruntime-node'],
   },
   {
-    id: 'comp_ss_face_grouping',
+    id: 'comp_studio_face_grouping',
     name: 'Face Grouping & Biometric Cluster Engine',
     layerId: 'layer_1_ai_ml',
     priority: 8,
     description: 'Face detection, eye closure analysis, identity embeddings, and subject clustering across burst sets.',
     color: 'green',
     filePatterns: [/face-grouping-system\//, /electron\/faceGrouping\//, /scripts\/face/, /run-facegroup/],
-    callers: ['comp_ss_cull_inspector', 'comp_ss_zustand'],
-    callees: ['comp_ss_onnx_pool'],
+    callers: ['comp_studio_cull_inspector', 'comp_studio_zustand'],
+    callees: ['comp_studio_onnx_pool'],
   },
   {
-    id: 'comp_ss_semantic_search',
+    id: 'comp_studio_semantic_search',
     name: 'SigLIP Semantic Vision Search',
     layerId: 'layer_1_ai_ml',
     priority: 9,
     description: '512-dimension SigLIP image and text embeddings enabling natural language search ("bride laughing", "kiss").',
     color: 'green',
     filePatterns: [/scripts\/clip/, /electron\/search\//, /scripts\/burst_metadata_worker/],
-    callers: ['comp_ss_spotlight', 'comp_ss_filters'],
-    callees: ['comp_ss_onnx_pool'],
+    callers: ['comp_studio_spotlight', 'comp_studio_filters'],
+    callees: ['comp_studio_onnx_pool'],
   },
   {
-    id: 'comp_ss_duplicate_detector',
+    id: 'comp_studio_duplicate_detector',
     name: 'Burst & Duplicate Detection Engine',
     layerId: 'layer_1_ai_ml',
     priority: 10,
     description: 'Temporal burst clustering, duplicate image hash comparison, and automatic best-shot recommendations.',
     color: 'green',
     filePatterns: [/src\/components\/duplicates\//, /src\/utils\/duplicate/],
-    callers: ['comp_ss_photo_deck', 'comp_ss_filters'],
-    callees: ['comp_ss_zustand'],
+    callers: ['comp_studio_photo_deck', 'comp_studio_filters'],
+    callees: ['comp_studio_zustand'],
   },
   {
-    id: 'comp_ss_zustand',
+    id: 'comp_studio_zustand',
     name: 'Zustand Global Photo Store & State',
     layerId: 'layer_1_ai_ml',
     priority: 11,
     description: 'High-speed reactive store orchestrating photo selections, rating maps, culling triage states, and keyboard indices.',
     color: 'green',
     filePatterns: [/src\/store\/usePhotoStore\./, /src\/store\/keyBindings\./, /src\/store\//],
-    callers: ['comp_ss_photo_deck', 'comp_ss_keyboard', 'comp_ss_import_panel'],
-    callees: ['comp_ss_sqlite', 'comp_ss_ipc'],
+    callers: ['comp_studio_photo_deck', 'comp_studio_keyboard', 'comp_studio_import_panel'],
+    callees: ['comp_studio_sqlite', 'comp_studio_ipc'],
   },
 
   // --- Layer 2: Desktop IPC & Workspace Shell ---
   {
-    id: 'comp_ss_shell',
+    id: 'comp_studio_shell',
     name: 'Workspace Shell & Navigation Router',
     layerId: 'layer_2_ipc_desktop',
     priority: 12,
@@ -156,10 +156,10 @@ export const SHOTSELECT_CLUSTER_RULES: ComponentClusterRule[] = [
     color: 'amber',
     filePatterns: [/src\/components\/shell\//, /src\/navigation\//, /src\/components\/LeftSidebar\//, /src\/components\/Navigator\//],
     callers: ['src/App.tsx'],
-    callees: ['comp_ss_zustand', 'comp_ss_photo_deck', 'comp_ss_import_panel'],
+    callees: ['comp_studio_zustand', 'comp_studio_photo_deck', 'comp_studio_import_panel'],
   },
   {
-    id: 'comp_ss_keyboard',
+    id: 'comp_studio_keyboard',
     name: 'High-Speed Keyboard Supervisor',
     layerId: 'layer_2_ipc_desktop',
     priority: 13,
@@ -167,56 +167,56 @@ export const SHOTSELECT_CLUSTER_RULES: ComponentClusterRule[] = [
     color: 'amber',
     filePatterns: [/src\/hooks\/useKeyboard\./, /src\/hooks\//],
     callers: ['window.addEventListener(keydown)'],
-    callees: ['comp_ss_zustand'],
+    callees: ['comp_studio_zustand'],
   },
   {
-    id: 'comp_ss_cull_coordinator',
+    id: 'comp_studio_cull_coordinator',
     name: 'Cull Triage & Filter Coordinator',
     layerId: 'layer_2_ipc_desktop',
     priority: 14,
     description: 'Coordinates active filter chips, star ratings, reject states, AI checks filter groups, and triage statistics.',
     color: 'amber',
     filePatterns: [/src\/components\/ProjectCullCoordinator\./, /src\/components\/filters\//],
-    callers: ['comp_ss_photo_deck', 'comp_ss_shell'],
-    callees: ['comp_ss_zustand'],
+    callers: ['comp_studio_photo_deck', 'comp_studio_shell'],
+    callees: ['comp_studio_zustand'],
   },
   {
-    id: 'comp_ss_design_tokens',
+    id: 'comp_studio_design_tokens',
     name: 'Color & Motion Tokens Engine',
     layerId: 'layer_2_ipc_desktop',
     priority: 15,
     description: 'Dark-only color palette, Framer Motion spring presets, typography scale, and accessible UI primitives.',
     color: 'amber',
     filePatterns: [/src\/design\//, /src\/config\//, /src\/context\//, /src\/components\/primitives\//],
-    callers: ['comp_ss_photo_deck', 'comp_ss_shell', 'comp_ss_import_panel'],
+    callers: ['comp_studio_photo_deck', 'comp_studio_shell', 'comp_studio_import_panel'],
     callees: ['Tailwind CSS v3', 'framer-motion'],
   },
   {
-    id: 'comp_ss_collab_policy',
+    id: 'comp_studio_collab_policy',
     name: 'Shared Workspace & Team Policy',
     layerId: 'layer_2_ipc_desktop',
     priority: 16,
     description: 'Multi-seat team culling rules, share policy enforcement, and client review access tokens.',
     color: 'amber',
     filePatterns: [/src\/components\/share\//, /src\/components\/shared\//, /src\/sharePolicy\//, /src\/sharedWorkspace\//, /src\/teamJoin\//],
-    callers: ['comp_ss_shell'],
-    callees: ['comp_ss_ipc', 'comp_ss_zustand'],
+    callers: ['comp_studio_shell'],
+    callees: ['comp_studio_ipc', 'comp_studio_zustand'],
   },
 
   // --- Layer 3: Studio UI & Deck Interaction ---
   {
-    id: 'comp_ss_photo_deck',
+    id: 'comp_studio_photo_deck',
     name: 'PhotoDeck Culling Canvas & PhotoCard',
     layerId: 'layer_3_studio_ui',
     priority: 17,
     description: 'The core culling workspace with hardware-accelerated pan/zoom, swipe triage cards, and focus-point toggles.',
     color: 'rose',
     filePatterns: [/src\/components\/PhotoDeck\./, /src\/components\/PhotoCard\./, /src\/components\/cull\//, /src\/components\/grid\//],
-    callers: ['User Gestures', 'comp_ss_keyboard'],
-    callees: ['comp_ss_zustand', 'comp_ss_raw_decoder'],
+    callers: ['User Gestures', 'comp_studio_keyboard'],
+    callees: ['comp_studio_zustand', 'comp_studio_raw_decoder'],
   },
   {
-    id: 'comp_ss_import_panel',
+    id: 'comp_studio_import_panel',
     name: 'Import Panel & Drive Inspector',
     layerId: 'layer_3_studio_ui',
     priority: 18,
@@ -224,21 +224,21 @@ export const SHOTSELECT_CLUSTER_RULES: ComponentClusterRule[] = [
     color: 'rose',
     filePatterns: [/src\/components\/ImportPanel\./, /src\/components\/import\//, /src\/components\/DriveDetailsDrawer\./],
     callers: ['User Click', 'OS Mount Event'],
-    callees: ['comp_ss_ipc', 'comp_ss_zustand'],
+    callees: ['comp_studio_ipc', 'comp_studio_zustand'],
   },
   {
-    id: 'comp_ss_compare_view',
+    id: 'comp_studio_compare_view',
     name: 'Synchronized Compare Mode & Loupe',
     layerId: 'layer_3_studio_ui',
     priority: 19,
     description: 'Dual/multi photo side-by-side split view with synchronized 400% zoom loupe and pixel inspection.',
     color: 'rose',
     filePatterns: [/src\/components\/CompareMode\./, /src\/components\/compare\//, /src\/components\/LoupeCaption\./],
-    callers: ['comp_ss_photo_deck'],
-    callees: ['comp_ss_raw_decoder', 'comp_ss_zustand'],
+    callers: ['comp_studio_photo_deck'],
+    callees: ['comp_studio_raw_decoder', 'comp_studio_zustand'],
   },
   {
-    id: 'comp_ss_export_panel',
+    id: 'comp_studio_export_panel',
     name: 'Export & Lightroom Sync Dock',
     layerId: 'layer_3_studio_ui',
     priority: 20,
@@ -246,51 +246,51 @@ export const SHOTSELECT_CLUSTER_RULES: ComponentClusterRule[] = [
     color: 'rose',
     filePatterns: [/src\/components\/ExportPanel\./, /src\/components\/export\//],
     callers: ['User Click (Export CTA)'],
-    callees: ['comp_ss_xmp_engine', 'comp_ss_sqlite'],
+    callees: ['comp_studio_xmp_engine', 'comp_studio_sqlite'],
   },
   {
-    id: 'comp_ss_cull_inspector',
+    id: 'comp_studio_cull_inspector',
     name: 'Face & Retouch Inspector Panel',
     layerId: 'layer_3_studio_ui',
     priority: 21,
     description: 'Side inspector displaying detected subject faces, focus sharpness metrics, and EXIF camera data.',
     color: 'rose',
     filePatterns: [/src\/components\/FacesPersonInspector\./, /src\/components\/RetouchInspectorSection\./, /src\/components\/ImageStats\./],
-    callers: ['comp_ss_photo_deck'],
-    callees: ['comp_ss_face_grouping', 'comp_ss_zustand'],
+    callers: ['comp_studio_photo_deck'],
+    callees: ['comp_studio_face_grouping', 'comp_studio_zustand'],
   },
   {
-    id: 'comp_ss_spotlight',
+    id: 'comp_studio_spotlight',
     name: 'Spotlight Search & Omnibar',
     layerId: 'layer_3_studio_ui',
     priority: 22,
     description: 'Quick-open command palette (Cmd+K) supporting filename search, AI semantic queries, and keyboard commands.',
     color: 'rose',
     filePatterns: [/src\/components\/SpotlightSearch\./],
-    callers: ['comp_ss_keyboard'],
-    callees: ['comp_ss_semantic_search', 'comp_ss_zustand'],
+    callers: ['comp_studio_keyboard'],
+    callees: ['comp_studio_semantic_search', 'comp_studio_zustand'],
   },
   {
-    id: 'comp_ss_modals_help',
+    id: 'comp_studio_modals_help',
     name: 'Studio Modals & Help Center',
     layerId: 'layer_3_studio_ui',
     priority: 23,
     description: 'Interactive shortcuts overlay, feedback reporter, stats modal, and crash recovery prompt.',
     color: 'rose',
     filePatterns: [/src\/components\/ShortcutsModal\./, /src\/components\/HelpCenter\./, /src\/components\/FeedbackModal\./, /src\/components\/StatsModal\./, /src\/components\/EjectConfirmModal\./, /src\/onboarding\//],
-    callers: ['comp_ss_shell', 'comp_ss_keyboard'],
-    callees: ['comp_ss_zustand'],
+    callers: ['comp_studio_shell', 'comp_studio_keyboard'],
+    callees: ['comp_studio_zustand'],
   },
   {
-    id: 'comp_ss_delivery_board',
+    id: 'comp_studio_delivery_board',
     name: 'Delivery Status & Gallery Board',
     layerId: 'layer_3_studio_ui',
     priority: 24,
     description: 'Photographer delivery board showing export status, client gallery links, and archive packages.',
     color: 'rose',
     filePatterns: [/src\/components\/DeliveryStatusBoard\./, /src\/components\/DeliveryGalleryPanel\./, /src\/components\/ArchivePreparationPanel\./],
-    callers: ['comp_ss_shell'],
-    callees: ['comp_ss_cloud_sync', 'comp_ss_export_panel'],
+    callers: ['comp_studio_shell'],
+    callees: ['comp_studio_cloud_sync', 'comp_studio_export_panel'],
   },
 
   // --- Layer 4: Verification & Test Harness ---
@@ -303,7 +303,7 @@ export const SHOTSELECT_CLUSTER_RULES: ComponentClusterRule[] = [
     color: 'emerald',
     filePatterns: [/electron\/__tests__\/.*db.*test/, /electron\/__tests__\/.*Raw.*test/, /electron\/__tests__\/.*xmp.*test/, /electron\/__tests__\/.*mount.*test/],
     callers: ['CI/CD Pipeline'],
-    callees: ['comp_ss_sqlite', 'comp_ss_raw_decoder', 'comp_ss_xmp_engine', 'comp_ss_mount_supervisor'],
+    callees: ['comp_studio_sqlite', 'comp_studio_raw_decoder', 'comp_studio_xmp_engine', 'comp_studio_mount_supervisor'],
   },
   {
     id: 'comp_test_ai_perception',
@@ -314,7 +314,7 @@ export const SHOTSELECT_CLUSTER_RULES: ComponentClusterRule[] = [
     color: 'emerald',
     filePatterns: [/face-grouping.*test/, /electron\/__tests__\/.*face.*test/, /electron\/__tests__\/.*semantic.*test/, /electron\/__tests__\/.*search.*test/],
     callers: ['CI/CD Pipeline'],
-    callees: ['comp_ss_onnx_pool', 'comp_ss_face_grouping', 'comp_ss_semantic_search', 'comp_ss_duplicate_detector'],
+    callees: ['comp_studio_onnx_pool', 'comp_studio_face_grouping', 'comp_studio_semantic_search', 'comp_studio_duplicate_detector'],
   },
   {
     id: 'comp_test_ipc_shell',
@@ -325,7 +325,7 @@ export const SHOTSELECT_CLUSTER_RULES: ComponentClusterRule[] = [
     color: 'emerald',
     filePatterns: [/electron\/__tests__\/.*preload.*test/, /src\/store\/__tests__/, /src\/hooks\/__tests__/],
     callers: ['CI/CD Pipeline'],
-    callees: ['comp_ss_ipc', 'comp_ss_zustand', 'comp_ss_shell', 'comp_ss_keyboard', 'comp_ss_collab_policy'],
+    callees: ['comp_studio_ipc', 'comp_studio_zustand', 'comp_studio_shell', 'comp_studio_keyboard', 'comp_studio_collab_policy'],
   },
   {
     id: 'comp_test_studio_ui',
@@ -336,7 +336,7 @@ export const SHOTSELECT_CLUSTER_RULES: ComponentClusterRule[] = [
     color: 'emerald',
     filePatterns: [/src\/components\/__tests__/, /src\/components\/.*\.test\./],
     callers: ['CI/CD Pipeline'],
-    callees: ['comp_ss_photo_deck', 'comp_ss_import_panel', 'comp_ss_compare_view', 'comp_ss_export_panel', 'comp_ss_cull_inspector'],
+    callees: ['comp_studio_photo_deck', 'comp_studio_import_panel', 'comp_studio_compare_view', 'comp_studio_export_panel', 'comp_studio_cull_inspector'],
   },
   {
     id: 'comp_test_e2e_acceptance',
@@ -347,7 +347,7 @@ export const SHOTSELECT_CLUSTER_RULES: ComponentClusterRule[] = [
     color: 'emerald',
     filePatterns: [/e2e\//, /tests\/e2e/],
     callers: ['Nightly E2E Test Runner'],
-    callees: ['comp_ss_sqlite', 'comp_ss_mount_supervisor', 'comp_ss_photo_deck', 'comp_ss_export_panel', 'comp_ss_cloud_sync'],
+    callees: ['comp_studio_sqlite', 'comp_studio_mount_supervisor', 'comp_studio_photo_deck', 'comp_studio_export_panel', 'comp_studio_cloud_sync'],
   },
 ];
 
@@ -359,7 +359,7 @@ export class ArchitectureClusterer {
     sourceFiles: ParsedFileResult[],
     testFiles: ParsedFileResult[],
     layers: ArchitectureLayer[],
-    rules: ComponentClusterRule[] = SHOTSELECT_CLUSTER_RULES,
+    rules: ComponentClusterRule[] = STUDIO_DESKTOP_CLUSTER_RULES,
     wasteResult?: WasteAnalysisResult
   ): ArchitectureComponent[] {
     const components: ArchitectureComponent[] = [];
@@ -437,7 +437,7 @@ export class ArchitectureClusterer {
       const gaps = [];
 
       // Critical gap on XMP sync
-      if (rule.id === 'comp_ss_xmp_engine') {
+      if (rule.id === 'comp_studio_xmp_engine') {
         status = 'gap_detected';
         progress = 85;
         gaps.push({
@@ -491,7 +491,7 @@ export class ArchitectureClusterer {
         : undefined;
 
       components.push({
-        id: 'comp_ss_shared_utils',
+        id: 'comp_studio_shared_utils',
         name: 'Shared System Libraries & Helpers',
         layerId: 'layer_1_ai_ml',
         priority: 25,
@@ -580,13 +580,13 @@ export class ArchitectureClusterer {
     layers: ArchitectureLayer[] = ArchitectureClusterer.DEFAULT_UNIVERSAL_LAYERS,
     wasteResult?: WasteAnalysisResult
   ): ArchitectureComponent[] {
-    // Check if repository matches predefined ShotSelect rules
-    const matchesShotSelect = sourceFiles.some((sf) =>
+    // Check if repository matches predefined studio desktop rules
+    const matchesStudioDesktop = sourceFiles.some((sf) =>
       /electron\/embeddedPreview|electron\/xmp|electron\/faceGrouping/.test(sf.filePath)
     );
 
-    if (matchesShotSelect) {
-      return this.clusterRepository(sourceFiles, testFiles, layers, SHOTSELECT_CLUSTER_RULES, wasteResult);
+    if (matchesStudioDesktop) {
+      return this.clusterRepository(sourceFiles, testFiles, layers, STUDIO_DESKTOP_CLUSTER_RULES, wasteResult);
     }
 
     // Generic Clustering Engine for ANY repository

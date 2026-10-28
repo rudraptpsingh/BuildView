@@ -1,6 +1,6 @@
 import { BuildViewProject, ArchitectureLayer, ArchitectureComponent } from '../shared/types.js';
 
-export function getShotSelectLayers(): ArchitectureLayer[] {
+export function getSampleLayers(): ArchitectureLayer[] {
   return [
     {
       id: 'layer_0_native_storage',
@@ -40,11 +40,11 @@ export function getShotSelectLayers(): ArchitectureLayer[] {
   ];
 }
 
-export function getShotSelectComponents(): ArchitectureComponent[] {
+export function getSampleComponents(): ArchitectureComponent[] {
   return [
     // --- Layer 0: Native & Storage Core ---
     {
-      id: 'comp_ss_sqlite',
+      id: 'comp_studio_sqlite',
       name: 'SQLite Session Store & Migrations',
       layerId: 'layer_0_native_storage',
       description: 'Embedded fast persistence for photo culling sessions, flags, ratings, and project workspaces.',
@@ -67,7 +67,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'connectionState', type: "'connected' | 'idle'", initialValue: "'connected'", description: 'SQLite pool status' },
           { name: 'writeBufferCount', type: 'number', initialValue: '0', description: 'Unflushed SQLite transactions' },
         ],
-        callers: ['comp_ss_ipc', 'comp_ss_zustand'],
+        callers: ['comp_studio_ipc', 'comp_studio_zustand'],
         callees: ['better-sqlite3'],
       },
       files: [
@@ -84,7 +84,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_raw_decoder',
+      id: 'comp_studio_raw_decoder',
       name: 'Fast RAW Preview & Embedded Decoder',
       layerId: 'layer_0_native_storage',
       description: 'Extracts embedded full-resolution JPEGs and burst thumbnails from CR2, CR3, NEF, ARW, and DNG camera files.',
@@ -105,7 +105,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'activeDecodes', type: 'number', initialValue: '0', description: 'Parallel decoding threads' },
           { name: 'gpuAcceleration', type: 'boolean', initialValue: 'true', description: 'Metal / GPU acceleration indicator' },
         ],
-        callers: ['comp_ss_photo_deck', 'comp_ss_compare_view', 'comp_ss_cull_inspector'],
+        callers: ['comp_studio_photo_deck', 'comp_studio_compare_view', 'comp_studio_cull_inspector'],
         callees: ['sharp', 'native/fast-raw-preview'],
       },
       files: [
@@ -122,7 +122,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_xmp_engine',
+      id: 'comp_studio_xmp_engine',
       name: 'XMP Sidecar Sync Engine',
       layerId: 'layer_0_native_storage',
       description: 'Generates and reads Adobe XMP sidecar files for Lightroom, Capture One, and Bridge interoperability.',
@@ -143,7 +143,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'pendingWrites', type: 'number', initialValue: '0', description: 'Queued disk sidecar writes' },
           { name: 'lastWriteFailure', type: 'string | null', initialValue: 'null', description: 'Latest filesystem error details' },
         ],
-        callers: ['comp_ss_export_panel'],
+        callers: ['comp_studio_export_panel'],
         callees: ['Node fs/promises', 'exiftool-vendored'],
       },
       files: [
@@ -175,7 +175,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_mount_supervisor',
+      id: 'comp_studio_mount_supervisor',
       name: 'Volume & SD Card Mount Supervisor',
       layerId: 'layer_0_native_storage',
       description: 'Monitors macOS/Windows disk drive attachments, camera memory card insertions, and read-only flags.',
@@ -192,7 +192,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'checkWritePermissions', signature: '(path: string): Promise<boolean>', returnType: 'Promise<boolean>', isAsync: true, description: 'Verifies drive write permissions' },
         ],
         state: [],
-        callers: ['comp_ss_import_panel', 'comp_ss_ipc'],
+        callers: ['comp_studio_import_panel', 'comp_studio_ipc'],
         callees: ['Node fs', 'diskusage'],
       },
       files: [
@@ -205,7 +205,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_ipc',
+      id: 'comp_studio_ipc',
       name: 'Electron Preload & IPC Bridge',
       layerId: 'layer_0_native_storage',
       description: 'Type-safe bridge connecting the React renderer with Node.js main process, FS operations, and mounted devices.',
@@ -221,8 +221,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'sendIpc', signature: '(channel: string, data: any): Promise<any>', returnType: 'Promise<any>', isAsync: true, description: 'Typed IPC invoker' },
         ],
         state: [],
-        callers: ['comp_ss_zustand', 'comp_ss_import_panel', 'comp_ss_photo_deck'],
-        callees: ['comp_ss_sqlite', 'comp_ss_raw_decoder'],
+        callers: ['comp_studio_zustand', 'comp_studio_import_panel', 'comp_studio_photo_deck'],
+        callees: ['comp_studio_sqlite', 'comp_studio_raw_decoder'],
       },
       files: [
         { path: 'electron/preload.ts', status: 'created', linesChanged: 340, description: 'Preload contextBridge API' },
@@ -234,7 +234,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_cloud_sync',
+      id: 'comp_studio_cloud_sync',
       name: 'Cloud Backup & Client Link Engine',
       layerId: 'layer_0_native_storage',
       description: 'Cloud backup dispatcher, client delivery links, and remote sync services.',
@@ -250,8 +250,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'uploadPhotos', signature: '(photos: string[]): Promise<UploadResult>', returnType: 'Promise<UploadResult>', isAsync: true, description: 'Dispatches background image upload' },
         ],
         state: [],
-        callers: ['comp_ss_export_panel', 'comp_ss_delivery_board'],
-        callees: ['comp_ss_sqlite', 'comp_ss_ipc'],
+        callers: ['comp_studio_export_panel', 'comp_studio_delivery_board'],
+        callees: ['comp_studio_sqlite', 'comp_studio_ipc'],
       },
       files: [
         { path: 'electron/cloudSync/backupService.ts', status: 'created', linesChanged: 280, description: 'Cloud backup queue' },
@@ -265,7 +265,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
 
     // --- Layer 1: AI Perception & ML Inference ---
     {
-      id: 'comp_ss_onnx_pool',
+      id: 'comp_studio_onnx_pool',
       name: 'ONNX Multi-Worker Pipeline',
       layerId: 'layer_1_ai_ml',
       priority: 7,
@@ -284,7 +284,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         state: [
           { name: 'poolStatus', type: "'idle' | 'processing'", initialValue: "'idle'", description: 'Worker thread status' },
         ],
-        callers: ['comp_ss_zustand', 'comp_ss_cull_inspector'],
+        callers: ['comp_studio_zustand', 'comp_studio_cull_inspector'],
         callees: ['onnxruntime-node'],
       },
       files: [
@@ -297,7 +297,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_face_grouping',
+      id: 'comp_studio_face_grouping',
       name: 'Face Grouping & Biometric Cluster Engine',
       layerId: 'layer_1_ai_ml',
       priority: 8,
@@ -311,8 +311,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'clusterFaces', signature: '(embeddings: Float32Array[]): ClusterResult[]', returnType: 'ClusterResult[]', description: 'DBSCAN face clustering' },
         ],
         state: [],
-        callers: ['comp_ss_cull_inspector', 'comp_ss_zustand'],
-        callees: ['comp_ss_onnx_pool'],
+        callers: ['comp_studio_cull_inspector', 'comp_studio_zustand'],
+        callees: ['comp_studio_onnx_pool'],
       },
       files: [
         { path: 'face-grouping-system/clusterEngine.ts', status: 'created', linesChanged: 340, description: 'Face DBSCAN clusterer' },
@@ -324,7 +324,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_semantic_search',
+      id: 'comp_studio_semantic_search',
       name: 'SigLIP Semantic Vision Search',
       layerId: 'layer_1_ai_ml',
       priority: 9,
@@ -338,8 +338,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'searchQuery', signature: '(text: string): Promise<SearchResult[]>', returnType: 'Promise<SearchResult[]>', isAsync: true, description: 'Cosine similarity ranking over photos' },
         ],
         state: [],
-        callers: ['comp_ss_spotlight', 'comp_ss_cull_coordinator'],
-        callees: ['comp_ss_onnx_pool'],
+        callers: ['comp_studio_spotlight', 'comp_studio_cull_coordinator'],
+        callees: ['comp_studio_onnx_pool'],
       },
       files: [
         { path: 'electron/search/vectorSearch.ts', status: 'created', linesChanged: 220, description: 'Vector cosine search' },
@@ -350,7 +350,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_duplicate_detector',
+      id: 'comp_studio_duplicate_detector',
       name: 'Burst & Duplicate Detection Engine',
       layerId: 'layer_1_ai_ml',
       priority: 10,
@@ -364,8 +364,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'findBurstGroups', signature: '(photos: PhotoItem[]): BurstSet[]', returnType: 'BurstSet[]', description: 'Clusters rapid bursts (< 0.5s)' },
         ],
         state: [],
-        callers: ['comp_ss_photo_deck', 'comp_ss_cull_coordinator'],
-        callees: ['comp_ss_zustand'],
+        callers: ['comp_studio_photo_deck', 'comp_studio_cull_coordinator'],
+        callees: ['comp_studio_zustand'],
       },
       files: [
         { path: 'src/components/duplicates/BurstClusterGroup.tsx', status: 'created', linesChanged: 175, description: 'Burst UI cluster view' },
@@ -376,7 +376,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_zustand',
+      id: 'comp_studio_zustand',
       name: 'Zustand Global Photo Store & State',
       layerId: 'layer_1_ai_ml',
       description: 'High-speed reactive store orchestrating photo selections, rating maps, culling triage states, and keyboard indices.',
@@ -399,8 +399,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         state: [
           { name: 'appPhase', type: "'import' | 'cull' | 'export'", initialValue: "'cull'", description: 'Active workflow stage' },
         ],
-        callers: ['comp_ss_photo_deck', 'comp_ss_keyboard', 'comp_ss_import_panel'],
-        callees: ['comp_ss_sqlite', 'comp_ss_ipc'],
+        callers: ['comp_studio_photo_deck', 'comp_studio_keyboard', 'comp_studio_import_panel'],
+        callees: ['comp_studio_sqlite', 'comp_studio_ipc'],
       },
       files: [
         { path: 'src/store/usePhotoStore.ts', status: 'created', linesChanged: 420, description: 'Main Zustand photo store' },
@@ -414,7 +414,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
 
     // --- Layer 2: Desktop IPC & Workspace Shell ---
     {
-      id: 'comp_ss_shell',
+      id: 'comp_studio_shell',
       name: 'Workspace Shell & Navigation Router',
       layerId: 'layer_2_ipc_desktop',
       description: 'Top-level desktop workspace layout, titlebar controls, inspector routers, and multi-view orchestrator.',
@@ -431,7 +431,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         state: [],
         callers: ['src/App.tsx'],
-        callees: ['comp_ss_zustand', 'comp_ss_photo_deck', 'comp_ss_import_panel'],
+        callees: ['comp_studio_zustand', 'comp_studio_photo_deck', 'comp_studio_import_panel'],
       },
       files: [
         { path: 'src/components/shell/WorkspaceShell.tsx', status: 'created', linesChanged: 260, description: 'Shell container' },
@@ -443,7 +443,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_keyboard',
+      id: 'comp_studio_keyboard',
       name: 'High-Speed Keyboard Supervisor',
       layerId: 'layer_2_ipc_desktop',
       description: 'Zero-latency keyboard culling engine processing 100+ keystrokes/sec with rapid-fire debounce prevention.',
@@ -462,7 +462,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         state: [],
         callers: ['window.addEventListener(keydown)'],
-        callees: ['comp_ss_zustand'],
+        callees: ['comp_studio_zustand'],
       },
       files: [
         { path: 'src/hooks/useKeyboard.ts', status: 'created', linesChanged: 185, description: 'Global keyboard listener hook' },
@@ -473,7 +473,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_cull_coordinator',
+      id: 'comp_studio_cull_coordinator',
       name: 'Cull Triage & Filter Coordinator',
       layerId: 'layer_2_ipc_desktop',
       description: 'Coordinates active filter chips, star ratings, reject states, AI checks filter groups, and triage statistics.',
@@ -489,8 +489,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'applyFilter', signature: '(filter: FilterCriterion): void', returnType: 'void', description: 'Updates filter mask' },
         ],
         state: [],
-        callers: ['comp_ss_photo_deck', 'comp_ss_shell'],
-        callees: ['comp_ss_zustand'],
+        callers: ['comp_studio_photo_deck', 'comp_studio_shell'],
+        callees: ['comp_studio_zustand'],
       },
       files: [
         { path: 'src/components/ProjectCullCoordinator.tsx', status: 'created', linesChanged: 290, description: 'Cull coordinator' },
@@ -502,7 +502,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_design_tokens',
+      id: 'comp_studio_design_tokens',
       name: 'Color & Motion Tokens Engine',
       layerId: 'layer_2_ipc_desktop',
       description: 'Dark-only color palette, Framer Motion spring presets, typography scale, and accessible UI primitives.',
@@ -516,7 +516,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         functions: [],
         state: [],
-        callers: ['comp_ss_photo_deck', 'comp_ss_shell', 'comp_ss_import_panel'],
+        callers: ['comp_studio_photo_deck', 'comp_studio_shell', 'comp_studio_import_panel'],
         callees: ['Tailwind CSS v3', 'framer-motion'],
       },
       files: [
@@ -529,7 +529,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_collab_policy',
+      id: 'comp_studio_collab_policy',
       name: 'Shared Workspace & Team Policy',
       layerId: 'layer_2_ipc_desktop',
       description: 'Multi-seat team culling rules, share policy enforcement, and client review access tokens.',
@@ -543,8 +543,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         functions: [],
         state: [],
-        callers: ['comp_ss_shell'],
-        callees: ['comp_ss_ipc', 'comp_ss_zustand'],
+        callers: ['comp_studio_shell'],
+        callees: ['comp_studio_ipc', 'comp_studio_zustand'],
       },
       files: [
         { path: 'src/sharePolicy/policyEnforcer.ts', status: 'created', linesChanged: 160, description: 'Share policy checks' },
@@ -557,7 +557,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
 
     // --- Layer 3: Studio UI & Deck Interaction ---
     {
-      id: 'comp_ss_photo_deck',
+      id: 'comp_studio_photo_deck',
       name: 'PhotoDeck Culling Canvas & PhotoCard',
       layerId: 'layer_3_studio_ui',
       description: 'The core culling workspace with hardware-accelerated pan/zoom, swipe triage cards, and focus-point toggles.',
@@ -579,8 +579,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'panOffset', type: 'Point', initialValue: '{ x: 0, y: 0 }', description: 'Photo viewport offset' },
           { name: 'activeZoomFactor', type: 'number', initialValue: '1.0', description: 'Zoom level (1x - 4x)' },
         ],
-        callers: ['User Gestures', 'comp_ss_keyboard'],
-        callees: ['comp_ss_zustand', 'comp_ss_raw_decoder'],
+        callers: ['User Gestures', 'comp_studio_keyboard'],
+        callees: ['comp_studio_zustand', 'comp_studio_raw_decoder'],
       },
       files: [
         { path: 'src/components/PhotoDeck.tsx', status: 'created', linesChanged: 490, description: 'PhotoDeck main culling canvas' },
@@ -605,7 +605,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_import_panel',
+      id: 'comp_studio_import_panel',
       name: 'Import Panel & Drive Inspector',
       layerId: 'layer_3_studio_ui',
       description: 'Studio home surface detecting camera memory cards, recent shoots, and folder hierarchies.',
@@ -624,7 +624,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         state: [],
         callers: ['User Click', 'OS Mount Event'],
-        callees: ['comp_ss_ipc', 'comp_ss_zustand'],
+        callees: ['comp_studio_ipc', 'comp_studio_zustand'],
       },
       files: [
         { path: 'src/components/ImportPanel.tsx', status: 'created', linesChanged: 380, description: 'Import library panel' },
@@ -636,7 +636,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_compare_view',
+      id: 'comp_studio_compare_view',
       name: 'Synchronized Compare Mode & Loupe',
       layerId: 'layer_3_studio_ui',
       description: 'Dual/multi photo side-by-side split view with synchronized 400% zoom loupe and pixel inspection.',
@@ -652,8 +652,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'syncPanZoom', signature: '(offset: Point, zoom: number): void', returnType: 'void', description: 'Locks viewport across dual panes' },
         ],
         state: [],
-        callers: ['comp_ss_photo_deck'],
-        callees: ['comp_ss_raw_decoder', 'comp_ss_zustand'],
+        callers: ['comp_studio_photo_deck'],
+        callees: ['comp_studio_raw_decoder', 'comp_studio_zustand'],
       },
       files: [
         { path: 'src/components/CompareMode.tsx', status: 'created', linesChanged: 280, description: 'Side-by-side compare component' },
@@ -665,7 +665,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_export_panel',
+      id: 'comp_studio_export_panel',
       name: 'Export & Lightroom Sync Dock',
       layerId: 'layer_3_studio_ui',
       description: 'Batch XMP writer dock, rating exporter, and direct-to-Lightroom catalog sync pipeline.',
@@ -682,7 +682,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         state: [],
         callers: ['User Click (Export CTA)'],
-        callees: ['comp_ss_xmp_engine', 'comp_ss_sqlite'],
+        callees: ['comp_studio_xmp_engine', 'comp_studio_sqlite'],
       },
       files: [
         { path: 'src/components/ExportPanel.tsx', status: 'created', linesChanged: 340, description: 'Export dock UI component' },
@@ -693,7 +693,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_cull_inspector',
+      id: 'comp_studio_cull_inspector',
       name: 'Face & Retouch Inspector Panel',
       layerId: 'layer_3_studio_ui',
       description: 'Side inspector displaying detected subject faces, focus sharpness metrics, and EXIF camera data.',
@@ -707,8 +707,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         functions: [],
         state: [],
-        callers: ['comp_ss_photo_deck'],
-        callees: ['comp_ss_face_grouping', 'comp_ss_zustand'],
+        callers: ['comp_studio_photo_deck'],
+        callees: ['comp_studio_face_grouping', 'comp_studio_zustand'],
       },
       files: [
         { path: 'src/components/FacesPersonInspector.tsx', status: 'created', linesChanged: 280, description: 'Face inspector panel' },
@@ -720,7 +720,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_spotlight',
+      id: 'comp_studio_spotlight',
       name: 'Spotlight Search & Omnibar',
       layerId: 'layer_3_studio_ui',
       description: 'Quick-open command palette (Cmd+K) supporting filename search, AI semantic queries, and keyboard commands.',
@@ -736,8 +736,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
           { name: 'openSpotlight', signature: '(): void', returnType: 'void', description: 'Opens Cmd+K spotlight overlay' },
         ],
         state: [],
-        callers: ['comp_ss_keyboard'],
-        callees: ['comp_ss_semantic_search', 'comp_ss_zustand'],
+        callers: ['comp_studio_keyboard'],
+        callees: ['comp_studio_semantic_search', 'comp_studio_zustand'],
       },
       files: [
         { path: 'src/components/SpotlightSearch.tsx', status: 'created', linesChanged: 245, description: 'Cmd+K omnibar modal' },
@@ -748,7 +748,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_modals_help',
+      id: 'comp_studio_modals_help',
       name: 'Studio Modals & Help Center',
       layerId: 'layer_3_studio_ui',
       description: 'Interactive shortcuts overlay, feedback reporter, stats modal, and crash recovery prompt.',
@@ -762,8 +762,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         functions: [],
         state: [],
-        callers: ['comp_ss_shell', 'comp_ss_keyboard'],
-        callees: ['comp_ss_zustand'],
+        callers: ['comp_studio_shell', 'comp_studio_keyboard'],
+        callees: ['comp_studio_zustand'],
       },
       files: [
         { path: 'src/components/ShortcutsModal.tsx', status: 'created', linesChanged: 195, description: 'Keyboard cheat sheet dialog' },
@@ -775,7 +775,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
       updatedAt: new Date().toISOString(),
     },
     {
-      id: 'comp_ss_delivery_board',
+      id: 'comp_studio_delivery_board',
       name: 'Delivery Status & Gallery Board',
       layerId: 'layer_3_studio_ui',
       description: 'Photographer delivery board showing export status, client gallery links, and archive packages.',
@@ -789,8 +789,8 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         functions: [],
         state: [],
-        callers: ['comp_ss_shell'],
-        callees: ['comp_ss_cloud_sync', 'comp_ss_export_panel'],
+        callers: ['comp_studio_shell'],
+        callees: ['comp_studio_cloud_sync', 'comp_studio_export_panel'],
       },
       files: [
         { path: 'src/components/DeliveryStatusBoard.tsx', status: 'created', linesChanged: 280, description: 'Delivery board status surface' },
@@ -820,7 +820,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         state: [],
         callers: ['CI/CD Pipeline', 'Agent Vitest Runner'],
-        callees: ['comp_ss_sqlite', 'comp_ss_raw_decoder', 'comp_ss_xmp_engine', 'comp_ss_mount_supervisor'],
+        callees: ['comp_studio_sqlite', 'comp_studio_raw_decoder', 'comp_studio_xmp_engine', 'comp_studio_mount_supervisor'],
       },
       files: [
         { path: 'electron/__tests__/db.test.ts', status: 'created', linesChanged: 499, description: 'SQLite unit tests' },
@@ -850,7 +850,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         state: [],
         callers: ['CI/CD Pipeline'],
-        callees: ['comp_ss_onnx_pool', 'comp_ss_face_grouping', 'comp_ss_semantic_search', 'comp_ss_duplicate_detector'],
+        callees: ['comp_studio_onnx_pool', 'comp_studio_face_grouping', 'comp_studio_semantic_search', 'comp_studio_duplicate_detector'],
       },
       files: [
         { path: 'electron/__tests__/faceGrouping.test.ts', status: 'created', linesChanged: 241, description: 'Face grouping specs' },
@@ -879,7 +879,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         state: [],
         callers: ['CI/CD Pipeline'],
-        callees: ['comp_ss_ipc', 'comp_ss_zustand', 'comp_ss_shell', 'comp_ss_keyboard', 'comp_ss_collab_policy'],
+        callees: ['comp_studio_ipc', 'comp_studio_zustand', 'comp_studio_shell', 'comp_studio_keyboard', 'comp_studio_collab_policy'],
       },
       files: [
         { path: 'electron/__tests__/preload.test.ts', status: 'created', linesChanged: 20, description: 'Preload bridge validation' },
@@ -909,7 +909,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         state: [],
         callers: ['CI/CD Pipeline'],
-        callees: ['comp_ss_photo_deck', 'comp_ss_import_panel', 'comp_ss_compare_view', 'comp_ss_export_panel', 'comp_ss_cull_inspector'],
+        callees: ['comp_studio_photo_deck', 'comp_studio_import_panel', 'comp_studio_compare_view', 'comp_studio_export_panel', 'comp_studio_cull_inspector'],
       },
       files: [
         { path: 'src/components/__tests__/PhotoDeck.test.tsx', status: 'created', linesChanged: 522, description: 'PhotoDeck canvas render specs' },
@@ -938,7 +938,7 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
         ],
         state: [],
         callers: ['Nightly E2E Test Runner'],
-        callees: ['comp_ss_sqlite', 'comp_ss_mount_supervisor', 'comp_ss_photo_deck', 'comp_ss_export_panel', 'comp_ss_cloud_sync'],
+        callees: ['comp_studio_sqlite', 'comp_studio_mount_supervisor', 'comp_studio_photo_deck', 'comp_studio_export_panel', 'comp_studio_cloud_sync'],
       },
       files: [
         { path: 'e2e/cullSessionFlow.spec.ts', status: 'created', linesChanged: 850, description: 'Complete photographer culling session test' },
@@ -951,16 +951,16 @@ export function getShotSelectComponents(): ArchitectureComponent[] {
   ];
 }
 
-export function getShotSelectProject(): BuildViewProject {
+export function getSampleProject(): BuildViewProject {
   return {
-    id: 'proj_shotselect_desktop',
-    name: 'ShotSelect Desktop Architecture',
-    description: 'Real-world high-speed Electron + React photo culling application (24 components mapped across 4 layers)',
+    id: 'proj_sample_studio',
+    name: 'Sample Studio Architecture',
+    description: 'High-performance creative desktop application with embedded storage, AI processing, IPC bridge, UI deck, and automated verification suites',
     version: '1.0.0',
-    layers: getShotSelectLayers(),
-    components: getShotSelectComponents(),
-    activeStep: 24,
-    totalSteps: 24,
+    layers: getSampleLayers(),
+    components: getSampleComponents(),
+    activeStep: 29,
+    totalSteps: 29,
     lastUpdated: new Date().toISOString(),
   };
 }

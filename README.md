@@ -41,8 +41,8 @@ BuildView connects coding agents (Claude, Antigravity, Cursor, Windsurf) via the
    - **Focused Inspection Mode**: Spotlights incoming callers (Emerald) and outgoing callees (Blue) on hover/selection while gracefully dimming unrelated nodes.
    - Docked inspector card with 1-click drawer deep-linking.
 
-8. **Real-World ShotSelect Architecture Mapping**
-   - Clustered across 25 components, 1,690 source files, 511,840 LOC, and 1,876 test files (31,523 correlated test cases).
+8. **Universal Production Codebase Architecture Mapping**
+   - Auto-clusters any arbitrary repository into 5 clean layers, mapping source files, LOC, and correlated test suites.
 
 ---
 

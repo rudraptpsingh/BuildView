@@ -234,7 +234,7 @@ export function getDogfoodComponents(): ArchitectureComponent[] {
         state: [
           { name: 'cacheEntries', type: 'number', initialValue: '0', description: 'Cached AST file count' },
         ],
-        callers: ['comp_mcp', 'scan-shotselect'],
+        callers: ['comp_mcp', 'scan-sample'],
         callees: ['typescript', 'comp_types'],
       },
       files: [

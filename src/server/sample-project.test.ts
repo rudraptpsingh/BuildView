@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { getShotSelectProject, getShotSelectLayers, getShotSelectComponents } from './shotselect-data.js';
+import { getSampleProject, getSampleLayers, getSampleComponents } from './sample-project-data.js';
 import { TokenEngine } from '../shared/tokens.js';
 
-describe('ShotSelect Architecture Mapping Suite', () => {
+describe('Sample Studio Architecture Mapping Suite', () => {
   it('should define all 5 architectural layers including Verification & Test Harness', () => {
-    const layers = getShotSelectLayers();
+    const layers = getSampleLayers();
     expect(layers).toHaveLength(5);
     expect(layers[0].id).toBe('layer_0_native_storage');
     expect(layers[1].id).toBe('layer_1_ai_ml');
@@ -14,7 +14,7 @@ describe('ShotSelect Architecture Mapping Suite', () => {
   });
 
   it('should map all 29 architectural components (24 source + 5 test harnesses) with valid priorities and API anatomies', () => {
-    const components = getShotSelectComponents();
+    const components = getSampleComponents();
     expect(components).toHaveLength(29);
 
     // Verify all components have valid priority ordering
@@ -32,8 +32,8 @@ describe('ShotSelect Architecture Mapping Suite', () => {
     }
   });
 
-  it('should satisfy 100% design token compliance across all ShotSelect components', () => {
-    const project = getShotSelectProject();
+  it('should satisfy 100% design token compliance across all sample components', () => {
+    const project = getSampleProject();
     for (const component of project.components) {
       const compliance = TokenEngine.validateCompliance(component);
       expect(compliance.valid).toBe(true);
@@ -42,8 +42,8 @@ describe('ShotSelect Architecture Mapping Suite', () => {
   });
 
   it('should track the active critical XMP write refusal gap', () => {
-    const project = getShotSelectProject();
-    const xmpComp = project.components.find((c) => c.id === 'comp_ss_xmp_engine');
+    const project = getSampleProject();
+    const xmpComp = project.components.find((c) => c.id === 'comp_studio_xmp_engine');
     expect(xmpComp).toBeDefined();
     expect(xmpComp?.status).toBe('gap_detected');
     expect(xmpComp?.gaps).toHaveLength(1);

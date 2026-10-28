@@ -5,6 +5,7 @@ import { BuildViewProject, ArchitectureLayer } from '../shared/types.js';
 import { RepoParser } from './parser/repo-parser.js';
 import { WasteDetector } from './parser/waste-detector.js';
 import { ArchitectureClusterer } from './parser/architecture-clusterer.js';
+import { ArchitectureRulesEngine } from './parser/architecture-rules.js';
 
 export interface ScanOptions {
   projectName?: string;
@@ -67,6 +68,10 @@ export class RepoScannerService {
       layers,
       wasteAnalysis
     );
+
+    // 4. Validate Architecture Invariants & Circular Dependencies (inspired by dependency-cruiser)
+    const ruleAnalysis = ArchitectureRulesEngine.analyzeArchitecture(components, layers);
+    ArchitectureRulesEngine.attachRuleGapsToComponents(components, ruleAnalysis);
 
     const project: BuildViewProject = {
       id: `proj_${projectName.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`,

@@ -4,7 +4,7 @@ import { BuildViewStore } from './store.js';
 import { RepoScannerService } from './repo-scanner-service.js';
 import { getCliDemoProject, getCliDemoSteps } from './demo-data.js';
 import { getDogfoodProject } from './dogfood-data.js';
-import { getShotSelectProject } from './shotselect-data.js';
+import { getSampleProject } from './sample-project-data.js';
 
 export function createApiRouter(store: BuildViewStore) {
   const router = express.Router();
@@ -79,9 +79,9 @@ export function createApiRouter(store: BuildViewStore) {
   // POST /api/reset - Switch active project
   router.post('/reset', (req, res) => {
     const { mode } = req.body || {};
-    if (mode === 'shotselect') {
-      const ssProject = getShotSelectProject();
-      store.resetProject(ssProject);
+    if (mode === 'sample') {
+      const sampleProject = getSampleProject();
+      store.resetProject(sampleProject);
     } else if (mode === 'dogfood') {
       const dogfoodProject = getDogfoodProject();
       store.resetProject(dogfoodProject);

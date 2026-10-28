@@ -10,7 +10,7 @@ interface SimulationControlsProps {
   onTogglePlay: () => void;
   onNextStep: () => void;
   onReset: () => void;
-  activeProjectMode: 'demo' | 'dogfood' | 'shotselect';
+  activeProjectMode: 'demo' | 'dogfood' | 'sample';
 }
 
 export const SimulationControls: React.FC<SimulationControlsProps> = ({

@@ -3,7 +3,6 @@ import confetti from 'canvas-confetti';
 import { BuildViewProject, ArchitectureComponent } from '@shared/types.js';
 import { getCliDemoProject, getCliDemoSteps, SimulationStep } from '@server/demo-data.js';
 import { getDogfoodProject } from '@server/dogfood-data.js';
-import { getShotSelectProject } from '@server/shotselect-data.js';
 import { Header } from './components/Header.js';
 import { RoadmapBanner } from './components/RoadmapBanner.js';
 import { LayerLane } from './components/LayerLane.js';
@@ -18,7 +17,7 @@ export const App: React.FC = () => {
   const [isDark, setIsDark] = useState<boolean>(false);
   const [activeMode, setActiveMode] = useState<'custom' | 'dogfood' | 'demo'>('custom');
   const [viewMode, setViewMode] = useState<'lanes' | 'graph' | 'table'>('lanes');
-  const [project, setProject] = useState<BuildViewProject>(() => getShotSelectProject());
+  const [project, setProject] = useState<BuildViewProject>(() => getDogfoodProject());
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [drawerInitialTab, setDrawerInitialTab] = useState<'anatomy' | 'graph' | 'files' | 'gaps' | 'tests' | 'waste' | undefined>(undefined);
   const [isGapsModalOpen, setIsGapsModalOpen] = useState<boolean>(false);

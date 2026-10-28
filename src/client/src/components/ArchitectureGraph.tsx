@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { BuildViewProject, ArchitectureComponent } from '@shared/types.js';
 import { LAYER_ACCENTS } from '@shared/tokens.js';
+import dagre from '@dagrejs/dagre';
 import { StatusBadge } from './ui/StatusBadge.js';
 import { TestBadge } from './ui/TestBadge.js';
 import { WasteBadge } from './ui/WasteBadge.js';
@@ -54,6 +55,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
   const [isCompact, setIsCompact] = useState<boolean>(false);
   const [edgeMode, setEdgeMode] = useState<'focused' | 'all'>('focused');
   const [showTestLayer, setShowTestLayer] = useState<boolean>(true);
+  const [layoutMode, setLayoutMode] = useState<'columns' | 'dagre'>('columns');
 
   // Canvas Pan & Zoom State
   const [zoom, setZoom] = useState<number>(1.0);
@@ -179,6 +181,47 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
     return list;
   }, [project.components]);
 
+  // Automated Hierarchical DAG Layout using Dagre (Sugiyama Algorithm)
+  const dagreLayout = useMemo(() => {
+    if (layoutMode !== 'dagre') return null;
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 160, align: 'UL' });
+    g.setDefaultEdgeLabel(() => ({}));
+
+    const nodeWidth = isCompact ? 220 : 260;
+    const nodeHeight = isCompact ? 60 : 70;
+
+    for (const comp of filteredComponents) {
+      g.setNode(comp.id, { width: nodeWidth, height: nodeHeight });
+    }
+
+    for (const edge of edges) {
+      if (
+        filteredComponents.some((c) => c.id === edge.source) &&
+        filteredComponents.some((c) => c.id === edge.target)
+      ) {
+        g.setEdge(edge.source, edge.target);
+      }
+    }
+
+    dagre.layout(g);
+
+    let maxX = 1400;
+    let maxY = 850;
+    const posMap = new Map<string, { x: number; y: number }>();
+
+    for (const id of g.nodes()) {
+      const node = g.node(id);
+      if (node) {
+        posMap.set(id, { x: node.x, y: node.y });
+        if (node.x + nodeWidth + 120 > maxX) maxX = node.x + nodeWidth + 120;
+        if (node.y + nodeHeight + 120 > maxY) maxY = node.y + nodeHeight + 120;
+      }
+    }
+
+    return { posMap, width: maxX, height: maxY };
+  }, [filteredComponents, edges, layoutMode, isCompact]);
+
   // Measure rendered circle node centers inside the transform content
   const updateNodePositions = useCallback(() => {
     if (!contentRef.current) return;
@@ -218,7 +261,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
       window.removeEventListener('resize', updateNodePositions);
       clearTimeout(timer);
     };
-  }, [filteredComponents, isCompact, updateNodePositions]);
+  }, [filteredComponents, isCompact, layoutMode, updateNodePositions]);
 
   // Pan interaction handlers
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -275,6 +318,137 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
       default:
         return <Layers className="w-3.5 h-3.5" />;
     }
+  };
+
+  // Reusable Circle Node Renderer (used in both Columns and Dagre layout modes)
+  const renderNode = (comp: ArchitectureComponent, customStyle?: React.CSSProperties) => {
+    const activeGaps = comp.gaps.filter((g) => !g.resolved);
+    const effectiveStatus = activeGaps.length > 0 ? 'gap_detected' : comp.status;
+    const isSelected = selectedComponentId === comp.id;
+    const isHovered = hoveredNodeId === comp.id;
+    const isTestHarness = comp.layerId === 'layer_4_tests' || comp.layerId === 'layer_verification';
+    const accent = LAYER_ACCENTS[comp.layerId] || LAYER_ACCENTS.default;
+
+    let isCaller = false;
+    let isCallee = false;
+    let nodeOpacity = 1;
+
+    if (relationMap && !isHovered && !isSelected) {
+      if (relationMap.callers.has(comp.id)) {
+        isCaller = true;
+      } else if (relationMap.callees.has(comp.id)) {
+        isCallee = true;
+      } else {
+        nodeOpacity = 0.2;
+      }
+    }
+
+    // Dynamic circle accent border
+    let circleBorder = accent.bar;
+    if (isCaller) circleBorder = '#10b981';
+    else if (isCallee) circleBorder = '#3b82f6';
+    else if (effectiveStatus === 'gap_detected') circleBorder = '#f59e0b';
+    else if (comp.status === 'completed') circleBorder = '#10b981';
+
+    const circleSize = isCompact ? 'w-10 h-10' : 'w-12 h-12';
+
+    return (
+      <div
+        key={comp.id}
+        data-interactive="true"
+        onClick={() => onSelectComponent(comp.id)}
+        onMouseEnter={() => setHoveredNodeId(comp.id)}
+        onMouseLeave={() => setHoveredNodeId(null)}
+        style={{ opacity: nodeOpacity, ...customStyle }}
+        className={`group relative flex items-center space-x-3 p-2.5 rounded-xl transition-all duration-200 cursor-pointer ${
+          isSelected
+            ? 'neu-surface ring-2 ring-blue-500 shadow-md'
+            : isHovered
+            ? 'neu-surface shadow-xs'
+            : 'hover:bg-[var(--surface-control)]/40'
+        }`}
+      >
+        {/* Circle Node Glyph */}
+        <div
+          data-circle-node={comp.id}
+          className={`relative shrink-0 rounded-full flex items-center justify-center font-mono font-bold transition-all duration-200 ${circleSize} ${
+            isHovered || isSelected ? 'scale-110 shadow-lg' : 'shadow-xs'
+          }`}
+          style={{
+            backgroundColor: 'var(--surface-raised)',
+            border: `2.5px solid ${circleBorder}`,
+          }}
+        >
+          {isTestHarness ? (
+            <TestTube className="w-4 h-4 text-emerald-400" />
+          ) : (
+            <span className="text-[10px] font-bold text-[var(--text-primary)]">
+              P{comp.priority}
+            </span>
+          )}
+
+          {/* Gap Warning Dot (Top-Right) */}
+          {effectiveStatus === 'gap_detected' && (
+            <span
+              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-xs animate-bounce"
+              title={`${activeGaps.length} architectural gap detected`}
+            >
+              <AlertTriangle className="w-2.5 h-2.5" />
+            </span>
+          )}
+
+          {/* Completed Checkmark (Bottom-Right) */}
+          {comp.status === 'completed' && effectiveStatus !== 'gap_detected' && (
+            <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+              <CheckCircle2 className="w-2.5 h-2.5" />
+            </span>
+          )}
+
+          {/* Prune Waste Tag (Top-Left) */}
+          {comp.wasteMetrics?.recommendation === 'prune' && (
+            <span
+              className="absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full bg-red-500 text-white flex items-center justify-center shadow-xs"
+              title="Dead code prune candidate"
+            >
+              <Trash2 className="w-2 h-2" />
+            </span>
+          )}
+        </div>
+
+        {/* Node Label & Telemetry beside Circle */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center space-x-1.5">
+            <span className="font-bold text-xs text-[var(--text-primary)] truncate group-hover:text-blue-500 transition-colors">
+              {comp.name}
+            </span>
+            {isCaller && (
+              <span className="pill green text-[8px] font-mono px-1 py-0 font-bold shrink-0 animate-pulse">
+                CALLER
+              </span>
+            )}
+            {isCallee && (
+              <span className="pill blue text-[8px] font-mono px-1 py-0 font-bold shrink-0 animate-pulse">
+                CALLEE
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-2 text-[10px] font-mono text-[var(--text-tertiary)] mt-0.5">
+            <span className="flex items-center space-x-0.5">
+              <FileCode className="w-2.5 h-2.5" />
+              <span>{comp.files.length}f</span>
+            </span>
+            <span>•</span>
+            <span className="flex items-center space-x-0.5 text-emerald-600 dark:text-emerald-400">
+              <TestTube className="w-2.5 h-2.5" />
+              <span>{comp.testSummary?.totalTests || 0}t</span>
+            </span>
+            <span>•</span>
+            <span className="font-semibold text-[var(--text-primary)]">{comp.progress}%</span>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -338,8 +512,28 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
           </div>
         </div>
 
-        {/* Right: Edge Mode, Test Toggle & Zoom Controls */}
+        {/* Right: Layout Switcher, Edge Mode, Test Toggle & Zoom Controls */}
         <div className="flex items-center space-x-2 font-mono text-xs">
+          {/* Layout Mode Selector: Columns vs Dagre Hierarchical */}
+          <div className="segmented-tabs text-[10px]">
+            <button
+              onClick={() => setLayoutMode('columns')}
+              className={`segmented-tab ${layoutMode === 'columns' ? 'active' : ''}`}
+              title="Architectural Layer Swimlanes"
+            >
+              <Layout className="w-3 h-3" />
+              <span>COLUMNS</span>
+            </button>
+            <button
+              onClick={() => setLayoutMode('dagre')}
+              className={`segmented-tab ${layoutMode === 'dagre' ? 'active' : ''}`}
+              title="Hierarchical Sugiyama DAG Layout (Dagre Open-Source Engine)"
+            >
+              <GitBranch className="w-3 h-3" />
+              <span>DAGRE DAG</span>
+            </button>
+          </div>
+
           {/* Test Layer Toggle */}
           <button
             onClick={() => setShowTestLayer(!showTestLayer)}
@@ -553,184 +747,83 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
             })}
           </svg>
 
-          {/* Dedicated Layer Track Columns (Dynamic 4 or 5 columns) */}
-          <div
-            className="relative z-10 grid gap-6"
-            style={{
-              gridTemplateColumns: `repeat(${visibleLayers.length}, minmax(280px, 1fr))`,
-              minWidth: `${Math.max(1200, visibleLayers.length * 300)}px`,
-            }}
-          >
-            {visibleLayers.map((layer) => {
-              const compsInLayer = filteredComponents.filter((c) => c.layerId === layer.id);
-              const accent = LAYER_ACCENTS[layer.id] || LAYER_ACCENTS.default;
+          {/* Layout Mode Rendering: Columns vs Dagre DAG */}
+          {layoutMode === 'columns' ? (
+            /* Dedicated Layer Track Columns (Dynamic 4 or 5 columns) */
+            <div
+              className="relative z-10 grid gap-6"
+              style={{
+                gridTemplateColumns: `repeat(${visibleLayers.length}, minmax(280px, 1fr))`,
+                minWidth: `${Math.max(1200, visibleLayers.length * 300)}px`,
+              }}
+            >
+              {visibleLayers.map((layer) => {
+                const compsInLayer = filteredComponents.filter((c) => c.layerId === layer.id);
 
-              return (
-                <div
-                  key={layer.id}
-                  className="flex flex-col space-y-4 rounded-2xl p-4 bg-[var(--surface-window)]/75 border border-[var(--border-subtle)] shadow-xs"
-                >
-                  {/* Minimal Column Header */}
-                  <div className="flex items-center justify-between pb-3 hairline-b">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-1 rounded-md bg-[var(--surface-control)]">
-                        {getLayerIcon(layer.id)}
-                      </div>
-                      <div>
-                        <h3 className="text-xs font-bold font-mono tracking-tight text-[var(--text-primary)] uppercase">
-                          {layer.name.replace(/^Layer \d+:\s*/, '')}
-                        </h3>
-                        <p className="text-[10px] text-[var(--text-tertiary)] font-mono line-clamp-1">
-                          {layer.description}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="pill neutral text-[10px] font-mono shrink-0">
-                      {compsInLayer.length}
-                    </span>
-                  </div>
-
-                  {/* Circle Nodes Rail */}
-                  <div className="flex flex-col space-y-3.5">
-                    {compsInLayer.map((comp) => {
-                      const activeGaps = comp.gaps.filter((g) => !g.resolved);
-                      const effectiveStatus = activeGaps.length > 0 ? 'gap_detected' : comp.status;
-                      const isSelected = selectedComponentId === comp.id;
-                      const isHovered = hoveredNodeId === comp.id;
-                      const isTestHarness = comp.layerId === 'layer_4_tests' || comp.layerId === 'layer_verification';
-
-                      let isCaller = false;
-                      let isCallee = false;
-                      let nodeOpacity = 1;
-
-                      if (relationMap && !isHovered && !isSelected) {
-                        if (relationMap.callers.has(comp.id)) {
-                          isCaller = true;
-                        } else if (relationMap.callees.has(comp.id)) {
-                          isCallee = true;
-                        } else {
-                          nodeOpacity = 0.2;
-                        }
-                      }
-
-                      // Dynamic circle accent border
-                      let circleBorder = accent.bar;
-                      if (isCaller) circleBorder = '#10b981';
-                      else if (isCallee) circleBorder = '#3b82f6';
-                      else if (effectiveStatus === 'gap_detected') circleBorder = '#f59e0b';
-                      else if (comp.status === 'completed') circleBorder = '#10b981';
-
-                      const circleSize = isCompact ? 'w-10 h-10' : 'w-12 h-12';
-
-                      return (
-                        <div
-                          key={comp.id}
-                          data-interactive="true"
-                          onClick={() => onSelectComponent(comp.id)}
-                          onMouseEnter={() => setHoveredNodeId(comp.id)}
-                          onMouseLeave={() => setHoveredNodeId(null)}
-                          style={{ opacity: nodeOpacity }}
-                          className={`group relative flex items-center space-x-3 p-2.5 rounded-xl transition-all duration-200 cursor-pointer ${
-                            isSelected
-                              ? 'neu-surface ring-2 ring-blue-500 shadow-md'
-                              : isHovered
-                              ? 'neu-surface shadow-xs'
-                              : 'hover:bg-[var(--surface-control)]/40'
-                          }`}
-                        >
-                          {/* Circle Node Glyph */}
-                          <div
-                            data-circle-node={comp.id}
-                            className={`relative shrink-0 rounded-full flex items-center justify-center font-mono font-bold transition-all duration-200 ${circleSize} ${
-                              isHovered || isSelected ? 'scale-110 shadow-lg' : 'shadow-xs'
-                            }`}
-                            style={{
-                              backgroundColor: 'var(--surface-raised)',
-                              border: `2.5px solid ${circleBorder}`,
-                            }}
-                          >
-                            {isTestHarness ? (
-                              <TestTube className="w-4 h-4 text-emerald-400" />
-                            ) : (
-                              <span className="text-[10px] font-bold text-[var(--text-primary)]">
-                                P{comp.priority}
-                              </span>
-                            )}
-
-                            {/* Gap Warning Dot (Top-Right) */}
-                            {effectiveStatus === 'gap_detected' && (
-                              <span
-                                className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-xs animate-bounce"
-                                title={`${activeGaps.length} architectural gap detected`}
-                              >
-                                <AlertTriangle className="w-2.5 h-2.5" />
-                              </span>
-                            )}
-
-                            {/* Completed Checkmark (Bottom-Right) */}
-                            {comp.status === 'completed' && effectiveStatus !== 'gap_detected' && (
-                              <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
-                                <CheckCircle2 className="w-2.5 h-2.5" />
-                              </span>
-                            )}
-
-                            {/* Prune Waste Tag (Top-Left) */}
-                            {comp.wasteMetrics?.recommendation === 'prune' && (
-                              <span
-                                className="absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full bg-red-500 text-white flex items-center justify-center shadow-xs"
-                                title="Dead code prune candidate"
-                              >
-                                <Trash2 className="w-2 h-2" />
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Node Label & Telemetry beside Circle */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center space-x-1.5">
-                              <span className="font-bold text-xs text-[var(--text-primary)] truncate group-hover:text-blue-500 transition-colors">
-                                {comp.name}
-                              </span>
-                              {isCaller && (
-                                <span className="pill green text-[8px] font-mono px-1 py-0 font-bold shrink-0 animate-pulse">
-                                  CALLER
-                                </span>
-                              )}
-                              {isCallee && (
-                                <span className="pill blue text-[8px] font-mono px-1 py-0 font-bold shrink-0 animate-pulse">
-                                  CALLEE
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex items-center space-x-2 text-[10px] font-mono text-[var(--text-tertiary)] mt-0.5">
-                              <span className="flex items-center space-x-0.5">
-                                <FileCode className="w-2.5 h-2.5" />
-                                <span>{comp.files.length}f</span>
-                              </span>
-                              <span>•</span>
-                              <span className="flex items-center space-x-0.5 text-emerald-600 dark:text-emerald-400">
-                                <TestTube className="w-2.5 h-2.5" />
-                                <span>{comp.testSummary?.totalTests || 0}t</span>
-                              </span>
-                              <span>•</span>
-                              <span className="font-semibold text-[var(--text-primary)]">{comp.progress}%</span>
-                            </div>
-                          </div>
+                return (
+                  <div
+                    key={layer.id}
+                    className="flex flex-col space-y-4 rounded-2xl p-4 bg-[var(--surface-window)]/75 border border-[var(--border-subtle)] shadow-xs"
+                  >
+                    {/* Minimal Column Header */}
+                    <div className="flex items-center justify-between pb-3 hairline-b">
+                      <div className="flex items-center space-x-2">
+                        <div className="p-1 rounded-md bg-[var(--surface-control)]">
+                          {getLayerIcon(layer.id)}
                         </div>
-                      );
-                    })}
-
-                    {compsInLayer.length === 0 && (
-                      <div className="p-4 text-center text-xs font-mono text-[var(--text-tertiary)] neu-well rounded-lg">
-                        No matching components
+                        <div>
+                          <h3 className="text-xs font-bold font-mono tracking-tight text-[var(--text-primary)] uppercase">
+                            {layer.name.replace(/^Layer \d+:\s*/, '')}
+                          </h3>
+                          <p className="text-[10px] text-[var(--text-tertiary)] font-mono line-clamp-1">
+                            {layer.description}
+                          </p>
+                        </div>
                       </div>
-                    )}
+                      <span className="pill neutral text-[10px] font-mono shrink-0">
+                        {compsInLayer.length}
+                      </span>
+                    </div>
+
+                    {/* Circle Nodes Rail */}
+                    <div className="flex flex-col space-y-3.5">
+                      {compsInLayer.map((comp) => renderNode(comp))}
+
+                      {compsInLayer.length === 0 && (
+                        <div className="p-4 text-center text-xs font-mono text-[var(--text-tertiary)] neu-well rounded-lg">
+                          No matching components
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Hierarchical Sugiyama DAG Layout (Dagre Open Source Engine) */
+            <div
+              className="relative z-10"
+              style={{
+                width: `${dagreLayout?.width || 1400}px`,
+                height: `${dagreLayout?.height || 850}px`,
+                minHeight: '800px',
+              }}
+            >
+              {filteredComponents.map((comp) => {
+                const pos = dagreLayout?.posMap.get(comp.id);
+                const nodeWidth = isCompact ? 220 : 260;
+                const nodeHeight = isCompact ? 60 : 70;
+                if (!pos) return null;
+
+                return renderNode(comp, {
+                  position: 'absolute',
+                  left: `${pos.x - nodeWidth / 2}px`,
+                  top: `${pos.y - nodeHeight / 2}px`,
+                  width: `${nodeWidth}px`,
+                });
+              })}
+            </div>
+          )}
         </div>
 
         {/* Floating Docked Active Inspector Card at Bottom-Right */}
