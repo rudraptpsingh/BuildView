@@ -162,7 +162,7 @@ export function createBuildViewMcpServer(store: BuildViewStore) {
         .default([]),
     },
     async (args) => {
-      const comp = store.defineComponent(args);
+      const comp = store.defineComponent({ ...args, gaps: [] });
       return {
         content: [
           {

@@ -39,6 +39,8 @@ export interface GapItem {
   resolutionNote?: string;
 }
 
+export type ComponentGap = GapItem;
+
 export interface TestCaseInfo {
   name: string;
   suite: string;
@@ -46,9 +48,10 @@ export interface TestCaseInfo {
 
 export interface TestFileInfo {
   path: string;
-  testCount: number;
-  suites: string[];
+  testCount?: number;
+  suites?: string[];
   testCases: TestCaseInfo[];
+  testFramework?: string;
 }
 
 export interface TestCoverageSummary {

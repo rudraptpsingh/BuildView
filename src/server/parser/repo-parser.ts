@@ -407,7 +407,7 @@ export class RepoParser {
       }
     }
 
-    const totalTests = matchedTestFiles.reduce((acc, t) => acc + t.testCount, 0);
+    const totalTests = matchedTestFiles.reduce((acc, t) => acc + (t.testCount || 0), 0);
     const testFilesCount = matchedTestFiles.length;
 
     let status: 'tested' | 'partial' | 'untested' = 'untested';

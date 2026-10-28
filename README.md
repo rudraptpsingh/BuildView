@@ -79,7 +79,55 @@ BuildView registers 7 tools for AI coding agents:
 
 ---
 
-## Installation & Setup
+## NPM CLI & Package Installation
+
+BuildView is available as both an npm CLI command and a programmatic TypeScript library.
+
+### 1. Instant Execution via npx (Zero Setup)
+
+Run directly on any codebase without installing:
+
+```bash
+# Scan any repository, generate DAG, detect AST waste, and link FigBridge designs
+npx buildview scan /path/to/repo
+
+# Run in CI/CD pipeline to verify clean layer boundaries & circular dependencies (fails on violations)
+npx buildview check .
+```
+
+### 2. Global / Local Installation
+
+```bash
+# Install globally
+npm install -g buildview
+
+# Or add as a development dependency
+npm install -D buildview
+```
+
+### 3. Programmatic Library Usage
+
+```typescript
+import { RepoScannerService, BuildViewStore } from 'buildview';
+
+const store = new BuildViewStore();
+const project = await RepoScannerService.scanRepository(store, './my-project');
+
+console.log(`Scanned ${project.components.length} components across ${project.layers.length} layers`);
+console.log(`Saved architecture artifact to buildview-architecture.json`);
+```
+
+---
+
+## FigBridge & Design System Connection
+
+If your project contains a `figbridge.connect.json` design-token mapping:
+- BuildView **automatically correlates** Figma components, variant IDs, and design names directly to the corresponding React/TypeScript implementation files.
+- The visualizer displays dedicated purple **FigBridge Mapped** status pills on each connected component with quick inspection of Figma node IDs.
+
+---
+
+## Local Development & Server Setup
 
 ```bash
 # Clone and install dependencies
@@ -90,7 +138,7 @@ npm install
 # Run automated test suite (TDD)
 npm test
 
-# Build client bundle
+# Build client bundle & TypeScript library
 npm run build
 
 # Start live server + Vite frontend
@@ -109,7 +157,7 @@ Add to your `claude_desktop_config.json`:
   "mcpServers": {
     "buildview": {
       "command": "npx",
-      "args": ["-y", "tsx", "/Users/rp/Documents/GitHub/BuildView/src/server/mcp-standalone.ts"]
+      "args": ["-y", "buildview", "mcp"]
     }
   }
 }

@@ -1,0 +1,23 @@
+# Source and tests
+src/
+test/
+e2e/
+mockups/
+*.test.ts
+*.spec.ts
+
+# Tooling and configs
+tsconfig.json
+tsconfig.build.json
+vite.config.ts
+vitest.config.ts
+.gitignore
+.DS_Store
+*.log
+*.tgz
+buildview-architecture.json
+
+# Development directories
+.buildview
+.buildview_test
+.buildview_mcp_test

@@ -269,6 +269,8 @@ export function getSampleComponents(): ArchitectureComponent[] {
       name: 'ONNX Multi-Worker Pipeline',
       layerId: 'layer_1_ai_ml',
       priority: 7,
+      description: 'Zero-Python on-device ML models executing in dedicated Node worker threads for blur, faces, and semantic search.',
+      color: 'cyan',
       status: 'completed',
       progress: 100,
       anatomy: {
@@ -301,6 +303,8 @@ export function getSampleComponents(): ArchitectureComponent[] {
       name: 'Face Grouping & Biometric Cluster Engine',
       layerId: 'layer_1_ai_ml',
       priority: 8,
+      description: 'Face detection, eye closure analysis, identity embeddings, and subject clustering across burst sets.',
+      color: 'cyan',
       status: 'completed',
       progress: 100,
       anatomy: {
@@ -328,6 +332,8 @@ export function getSampleComponents(): ArchitectureComponent[] {
       name: 'SigLIP Semantic Vision Search',
       layerId: 'layer_1_ai_ml',
       priority: 9,
+      description: '512-dimension SigLIP image and text embeddings enabling natural language search.',
+      color: 'cyan',
       status: 'completed',
       progress: 100,
       anatomy: {
@@ -354,6 +360,8 @@ export function getSampleComponents(): ArchitectureComponent[] {
       name: 'Burst & Duplicate Detection Engine',
       layerId: 'layer_1_ai_ml',
       priority: 10,
+      description: 'Temporal burst grouping and perceptual hash similarity detection.',
+      color: 'cyan',
       status: 'completed',
       progress: 100,
       anatomy: {

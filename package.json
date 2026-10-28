@@ -1,23 +1,83 @@
 {
   "name": "buildview",
-  "version": "1.0.0",
-  "description": "",
+  "version": "0.1.0",
+  "description": "Autonomous codebase architecture visualizer, AST invariant linter, and FigBridge design mapper",
   "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
-    "buildview": "./src/cli/index.ts"
+    "buildview": "./bin/buildview.js"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "import": "./dist/cli/index.js"
+    },
+    "./scanner": {
+      "types": "./dist/server/repo-scanner-service.d.ts",
+      "import": "./dist/server/repo-scanner-service.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "vitest run --config vitest.config.ts",
     "dev": "concurrently -n \"server,client\" -c \"blue,green\" \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:client": "vite",
-    "build": "vite build",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "vite build",
+    "build:server": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm test && npm run build",
     "buildview": "tsx src/cli/index.ts",
+    "scan": "tsx src/cli/index.ts scan",
+    "check": "tsx src/cli/index.ts check",
     "mcp": "tsx src/server/mcp-standalone.ts",
     "example:simulate": "tsx src/examples/simulate-cli.ts",
-    "scan": "tsx src/cli/index.ts scan",
     "scan:sample": "tsx src/examples/scan-sample.ts"
   },
+  "keywords": [
+    "architecture",
+    "visualizer",
+    "dag",
+    "dagre",
+    "ast",
+    "dead-code",
+    "waste-detection",
+    "pruning",
+    "dependency-graph",
+    "dependency-cruiser",
+    "figma",
+    "figbridge",
+    "mcp",
+    "model-context-protocol",
+    "linter",
+    "invariants",
+    "devtools"
+  ],
+  "author": "Rudra Pratap Singh",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rudraptpsingh/BuildView.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rudraptpsingh/BuildView/issues"
+  },
+  "homepage": "https://github.com/rudraptpsingh/BuildView#readme",
   "dependencies": {
     "@dagrejs/dagre": "^3.1.3",
     "@modelcontextprotocol/sdk": "^1.32.2",
