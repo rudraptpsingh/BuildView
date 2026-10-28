@@ -8,6 +8,7 @@ import { Header } from './components/Header.js';
 import { RoadmapBanner } from './components/RoadmapBanner.js';
 import { LayerLane } from './components/LayerLane.js';
 import { ArchitectureGraph } from './components/ArchitectureGraph.js';
+import { GapsPruneTable } from './components/GapsPruneTable.js';
 import { ComponentDrawer } from './components/ComponentDrawer.js';
 import { SimulationControls } from './components/SimulationControls.js';
 import { GapsModal } from './components/GapsModal.js';
@@ -15,9 +16,10 @@ import { GapsModal } from './components/GapsModal.js';
 export const App: React.FC = () => {
   const [isDark, setIsDark] = useState<boolean>(false);
   const [activeMode, setActiveMode] = useState<'dogfood' | 'shotselect' | 'demo'>('shotselect');
-  const [viewMode, setViewMode] = useState<'lanes' | 'graph'>('lanes');
+  const [viewMode, setViewMode] = useState<'lanes' | 'graph' | 'table'>('lanes');
   const [project, setProject] = useState<BuildViewProject>(() => getShotSelectProject());
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  const [drawerInitialTab, setDrawerInitialTab] = useState<'anatomy' | 'graph' | 'files' | 'gaps' | 'tests' | 'waste' | undefined>(undefined);
   const [isGapsModalOpen, setIsGapsModalOpen] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
 
@@ -248,6 +250,15 @@ export const App: React.FC = () => {
 
   const selectedComponent = project.components.find((c) => c.id === selectedComponentId) || null;
 
+  const handleSelectComponent = (id: string, tab?: string) => {
+    setSelectedComponentId(id);
+    if (tab) {
+      setDrawerInitialTab(tab as any);
+    } else {
+      setDrawerInitialTab(undefined);
+    }
+  };
+
   return (
     <div className="min-h-screen pb-32 flex flex-col transition-colors">
       {/* Top Navigation */}
@@ -268,15 +279,20 @@ export const App: React.FC = () => {
         {/* AI Agent Roadmap Banner */}
         <RoadmapBanner
           nextFocus={nextFocus}
-          onSelectComponent={(id) => setSelectedComponentId(id)}
+          onSelectComponent={(id) => handleSelectComponent(id)}
         />
 
-        {/* View Mode Switch: Lanes vs Minimal DAG Graph */}
+        {/* View Mode Switch: Lanes vs Minimal Circle DAG Graph vs Gaps & Prune Table */}
         {viewMode === 'graph' ? (
           <ArchitectureGraph
             project={project}
             selectedComponentId={selectedComponentId}
-            onSelectComponent={(id) => setSelectedComponentId(id)}
+            onSelectComponent={handleSelectComponent}
+          />
+        ) : viewMode === 'table' ? (
+          <GapsPruneTable
+            project={project}
+            onSelectComponent={handleSelectComponent}
           />
         ) : (
           <div className="space-y-8">
@@ -288,7 +304,7 @@ export const App: React.FC = () => {
                   layer={layer}
                   components={compsInLayer}
                   selectedComponentId={selectedComponentId || undefined}
-                  onSelectComponent={(c) => setSelectedComponentId(c.id)}
+                  onSelectComponent={(c) => handleSelectComponent(c.id)}
                 />
               );
             })}
@@ -300,8 +316,12 @@ export const App: React.FC = () => {
       <ComponentDrawer
         component={selectedComponent}
         allComponents={project.components}
-        onClose={() => setSelectedComponentId(null)}
-        onNavigateToComponent={(id) => setSelectedComponentId(id)}
+        onClose={() => {
+          setSelectedComponentId(null);
+          setDrawerInitialTab(undefined);
+        }}
+        onNavigateToComponent={(id) => handleSelectComponent(id)}
+        initialTab={drawerInitialTab}
       />
 
       {/* Global Gaps Audit Modal */}

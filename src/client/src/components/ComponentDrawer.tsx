@@ -28,6 +28,7 @@ interface ComponentDrawerProps {
   allComponents: ArchitectureComponent[];
   onClose: () => void;
   onNavigateToComponent: (id: string) => void;
+  initialTab?: 'anatomy' | 'graph' | 'files' | 'gaps' | 'tests' | 'waste';
 }
 
 export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({
@@ -35,9 +36,18 @@ export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({
   allComponents,
   onClose,
   onNavigateToComponent,
+  initialTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<'anatomy' | 'graph' | 'files' | 'gaps' | 'tests' | 'waste'>('anatomy');
+  const [activeTab, setActiveTab] = useState<'anatomy' | 'graph' | 'files' | 'gaps' | 'tests' | 'waste'>(
+    initialTab || 'anatomy'
+  );
   const [copiedFile, setCopiedFile] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, component?.id]);
 
   if (!component) return null;
 

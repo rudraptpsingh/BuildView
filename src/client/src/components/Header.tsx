@@ -1,13 +1,13 @@
 import React from 'react';
-import { Moon, Sun, AlertTriangle, RotateCcw, CheckCircle2, Columns3, Network } from 'lucide-react';
+import { Moon, Sun, AlertTriangle, RotateCcw, CheckCircle2, Columns3, Network, Table2 } from 'lucide-react';
 import { BuildViewProject } from '@shared/types.js';
 
 interface HeaderProps {
   project: BuildViewProject;
   isConnected: boolean;
   isDark: boolean;
-  viewMode: 'lanes' | 'graph';
-  onToggleViewMode: (mode: 'lanes' | 'graph') => void;
+  viewMode: 'lanes' | 'graph' | 'table';
+  onToggleViewMode: (mode: 'lanes' | 'graph' | 'table') => void;
   onToggleTheme: () => void;
   onReset: (mode: 'demo' | 'clean') => void;
   onOpenGaps: () => void;
@@ -30,6 +30,10 @@ export const Header: React.FC<HeaderProps> = ({
   const overallProgress = totalComponents > 0
     ? Math.round(project.components.reduce((sum, c) => sum + c.progress, 0) / totalComponents)
     : 0;
+
+  const totalPruneCount = project.components.filter(
+    (c) => c.wasteMetrics?.recommendation === 'prune'
+  ).length;
 
   return (
     <header className="sticky top-0 z-30 px-5 py-2.5 neu-surface hairline-b backdrop-blur-md">
@@ -58,7 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Center: View Switcher (Lanes vs Minimal Graph) */}
+        {/* Center: View Switcher (Lanes vs Minimal Circle Graph vs Gaps & Prune Table) */}
         <div className="segmented-tabs font-mono text-xs">
           <button
             onClick={() => onToggleViewMode('lanes')}
@@ -71,10 +75,21 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={() => onToggleViewMode('graph')}
             className={`segmented-tab ${viewMode === 'graph' ? 'active' : ''}`}
-            title="Minimal DAG Graph View"
+            title="DAG Circle Graph View"
           >
             <Network className="w-3.5 h-3.5" />
             <span>DAG GRAPH</span>
+          </button>
+          <button
+            onClick={() => onToggleViewMode('table')}
+            className={`segmented-tab ${viewMode === 'table' ? 'active' : ''}`}
+            title="Gaps & Prune Inspection Table"
+          >
+            <Table2 className="w-3.5 h-3.5" />
+            <span>GAPS & PRUNE</span>
+            {activeGapsCount > 0 && (
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse ml-0.5" />
+            )}
           </button>
         </div>
 
