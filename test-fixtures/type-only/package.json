@@ -1,0 +1,5 @@
+{
+  "name": "type-only",
+  "private": true,
+  "main": "electron/main.ts"
+}

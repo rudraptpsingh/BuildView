@@ -16,6 +16,7 @@
   ],
   "exclude": [
     "src/client",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "**/__tests__/**"
   ]
 }

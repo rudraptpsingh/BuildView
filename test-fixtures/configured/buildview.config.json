@@ -1,0 +1,44 @@
+{
+  "layers": [
+    {
+      "id": "core",
+      "name": "Core",
+      "order": 0,
+      "include": [
+        "lib/core/**"
+      ]
+    },
+    {
+      "id": "app",
+      "name": "App",
+      "order": 1,
+      "include": [
+        "lib/app/**"
+      ]
+    },
+    {
+      "id": "ui",
+      "name": "UI",
+      "order": 2,
+      "include": [
+        "lib/ui/**"
+      ]
+    }
+  ],
+  "testGlobs": [
+    "qa/**"
+  ],
+  "ignoreGlobs": [
+    "legacy/**"
+  ],
+  "entryPoints": [
+    "lib/plugins/**"
+  ],
+  "allowedEdges": [
+    {
+      "from": "lib/core/registry.ts",
+      "to": "lib/ui/**",
+      "reason": "plugin registry"
+    }
+  ]
+}

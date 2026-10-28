@@ -1,0 +1,5 @@
+{
+  "name": "tests-vs-product",
+  "private": true,
+  "main": "src/main.tsx"
+}

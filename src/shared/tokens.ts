@@ -143,6 +143,7 @@ export const LAYER_ACCENTS: Record<string, { bar: string; color: string; border:
   layer_state_ipc: { bar: '#ffd60a', color: 'amber', border: '#ffd60a48' },
   layer_presentation: { bar: '#f43f5e', color: 'rose', border: '#f43f5e48' },
   layer_verification: { bar: '#10b981', color: 'emerald', border: '#10b98148' },
+  layer_tooling: { bar: '#94a3b8', color: 'neutral', border: '#94a3b848' },
   default: { bar: '#636366', color: 'neutral', border: '#3f4047' },
 };
 
