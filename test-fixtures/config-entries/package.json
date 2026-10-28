@@ -1,0 +1,12 @@
+{
+  "name": "config-entries",
+  "private": true,
+  "main": "dist/index.js",
+  "bin": {
+    "tool": "bin/tool.js"
+  },
+  "scripts": {
+    "build": "node build-electron.js && tsc",
+    "gen": "tsx tools-local/generate.ts"
+  }
+}

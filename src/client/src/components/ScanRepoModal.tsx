@@ -91,7 +91,7 @@ export const ScanRepoModal: React.FC<ScanRepoModalProps> = ({
               required
               value={repoPath}
               onChange={(e) => setRepoPath(e.target.value)}
-              placeholder="e.g. /Users/rp/Documents/GitHub/AgentMonitor or ."
+              placeholder="e.g. ~/code/my-project or ."
               className="w-full px-3 py-2 text-xs font-mono rounded-lg neu-well bg-transparent text-[var(--text-primary)] placeholder-[var(--text-tertiary)] border border-[var(--border-default)] focus:outline-none focus:border-blue-500"
             />
             <p className="text-[10px] text-[var(--text-tertiary)] mt-1 font-mono">

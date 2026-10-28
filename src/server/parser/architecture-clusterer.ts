@@ -7,6 +7,57 @@ import {
 } from '../../shared/types.js';
 import { ParsedFileResult, RepoParser } from './repo-parser.js';
 import { WasteDetector, WasteAnalysisResult } from './waste-detector.js';
+import type { BuildViewLayerConfig } from '../analysis/config.js';
+import type { FileClassification, FileEdge } from '../analysis/dependency-graph.js';
+import type { RuntimeKind } from '../analysis/file-roles.js';
+import { matchesAnyGlob, normalizePath } from '../analysis/glob.js';
+import type { LayerSource } from '../../shared/types.js';
+
+/** Optional file-level facts that make auto-clustering precise. */
+export interface ClusterContext {
+  /** Resolved imports; when present, callers/callees come from these instead of string matching. */
+  fileEdges?: FileEdge[];
+  /** Role (product/test/tooling) and runtime of each file. */
+  fileInfo?: Map<string, FileClassification>;
+  /** Layers declared by glob in buildview.config.json. */
+  layerConfig?: BuildViewLayerConfig[];
+}
+
+const LAYER_KEYWORDS: Array<{ index: number; color: string; words: Set<string> }> = [
+  {
+    index: 0,
+    color: 'blue',
+    words: new Set(['db', 'database', 'sqlite', 'sql', 'storage', 'model', 'schema', 'native', 'fs', 'io', 'mount', 'config', 'foundation', 'persistence', 'migration', 'constant', 'type', 'types']),
+  },
+  {
+    index: 1,
+    color: 'cyan',
+    words: new Set(['ai', 'ml', 'onnx', 'perception', 'vision', 'search', 'engine', 'service', 'pipeline', 'worker', 'algo', 'algorithm', 'detector', 'analysi', 'analysis', 'domain', 'core']),
+  },
+  {
+    index: 2,
+    color: 'emerald',
+    words: new Set(['ipc', 'bridge', 'preload', 'router', 'route', 'controller', 'state', 'store', 'zustand', 'redux', 'middleware', 'hook', 'event', 'api', 'handler', 'context']),
+  },
+  {
+    index: 3,
+    color: 'rose',
+    words: new Set(['component', 'ui', 'view', 'page', 'panel', 'dock', 'dialog', 'modal', 'screen', 'card', 'cli', 'command', 'presentation', 'layout', 'widget']),
+  },
+];
+
+const GENERIC_SEGMENTS = new Set(['src', 'lib', 'app', 'packages', 'source']);
+const UI_IMPORT = /^(react|react-dom|preact|vue|svelte|solid-js|@angular\/core)(\/|$)/;
+
+/** Splits a module path into lowercase, singular word tokens (camelCase and separators). */
+export function tokenizeModuleKey(key: string): string[] {
+  return key
+    .split(/[\/\-_.]+/)
+    .flatMap((seg) => seg.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(' '))
+    .map((t) => t.toLowerCase())
+    .filter(Boolean)
+    .map((t) => (t.length > 3 && t.endsWith('s') ? t.slice(0, -1) : t));
+}
 
 export interface ComponentClusterRule {
   id: string;
@@ -568,17 +619,86 @@ export class ArchitectureClusterer {
       description: 'Automated test suites, unit specs, integration contracts, and E2E acceptance suites enforcing component invariants.',
       color: '#10b981',
     },
+    {
+      id: 'layer_tooling',
+      name: 'Layer 5: Build Tooling & Scripts',
+      order: 5,
+      description: 'Build scripts, tool configuration (vite, eslint, tailwind...), CI helpers and code generators. Not shipped as product code.',
+      color: '#94a3b8',
+    },
   ];
 
   /**
    * Automatically groups ANY arbitrary repository into cohesive architectural components
    * based on directory structures, module boundaries, AST imports, and caller/callee graphs.
    */
+  /**
+   * Picks a layer for a module. Order: config globs → tooling → folder keywords
+   * (relative to the runtime root) → runtime kind → React/UI majority.
+   */
+  public static classifyModuleLayer(
+    moduleKey: string,
+    files: ParsedFileResult[],
+    layers: ArchitectureLayer[],
+    context: ClusterContext = {}
+  ): { layerId: string; color: string; layerSource: LayerSource } {
+    const info = (f: ParsedFileResult) => context.fileInfo?.get(normalizePath(f.filePath));
+
+    if (context.layerConfig && context.layerConfig.length > 0) {
+      const votes = new Map<string, number>();
+      for (const f of files) {
+        const hit = context.layerConfig.find((l) => matchesAnyGlob(f.filePath, l.include));
+        if (hit) votes.set(hit.id, (votes.get(hit.id) || 0) + 1);
+      }
+      const best = Array.from(votes.entries()).sort((a, b) => b[1] - a[1])[0];
+      if (best) return { layerId: best[0], color: layers.find((l) => l.id === best[0])?.color || 'blue', layerSource: 'config' };
+    }
+
+    const toolingCount = files.filter((f) => info(f)?.role === 'tooling').length;
+    if (toolingCount > 0 && toolingCount >= files.length / 2) {
+      const tooling =
+        layers.find((l) => l.id === 'layer_tooling') ||
+        layers.find((l) => l.id === 'layer_verification' || l.id === 'layer_4_tests') ||
+        layers[layers.length - 1];
+      return { layerId: tooling.id, color: 'neutral', layerSource: 'tooling' };
+    }
+
+    const runtime = files.map((f) => info(f)?.runtime).find(Boolean);
+    const segments = normalizePath(moduleKey).split('/');
+    let rest = segments;
+    if (runtime && runtime.unit !== '.' && normalizePath(moduleKey).startsWith(runtime.unit)) {
+      rest = normalizePath(moduleKey).slice(runtime.unit.length).split('/').filter(Boolean);
+    }
+    rest = rest.filter((seg) => !GENERIC_SEGMENTS.has(seg.toLowerCase()));
+    const tokens = tokenizeModuleKey(rest.join('/'));
+
+    const pick = (index: number, color: string, layerSource: LayerSource) => ({
+      layerId: layers[index]?.id || ArchitectureClusterer.DEFAULT_UNIVERSAL_LAYERS[index].id,
+      color,
+      layerSource,
+    });
+
+    for (const group of LAYER_KEYWORDS) {
+      if (tokens.some((t) => group.words.has(t))) return pick(group.index, group.color, 'keyword');
+    }
+
+    const kind: RuntimeKind | undefined = runtime?.kind;
+    if (kind === 'shared') return pick(0, 'blue', 'shared');
+    if (kind === 'electron-main' || kind === 'worker') return pick(2, 'emerald', 'runtime');
+
+    const uiFiles = files.filter(
+      (f) => /\.(tsx|jsx|vue|svelte)$/.test(f.filePath) || (f.imports || []).some((i) => UI_IMPORT.test(i))
+    ).length;
+    if (uiFiles > 0 && uiFiles >= files.length / 2) return pick(3, 'rose', 'runtime');
+    return pick(1, 'cyan', 'default');
+  }
+
   public static autoClusterRepository(
     sourceFiles: ParsedFileResult[],
     testFiles: ParsedFileResult[],
     layers: ArchitectureLayer[] = ArchitectureClusterer.DEFAULT_UNIVERSAL_LAYERS,
-    wasteResult?: WasteAnalysisResult
+    wasteResult?: WasteAnalysisResult,
+    context: ClusterContext = {}
   ): ArchitectureComponent[] {
     // Generic Dynamic Clustering Engine for ANY repository
     const moduleMap = new Map<string, ParsedFileResult[]>();
@@ -602,10 +722,27 @@ export class ArchitectureClusterer {
       } else if (parts.length === 2) {
         moduleKey = parts[0];
       }
+      if (moduleKey === 'root' && context.fileInfo?.get(normalized)?.role === 'tooling') {
+        moduleKey = 'build-config';
+      }
 
       const existing = moduleMap.get(moduleKey) || [];
       existing.push(sf);
       moduleMap.set(moduleKey, existing);
+    }
+
+    const keyToId = (key: string) => `comp_${key.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`;
+    const fileToComponent = new Map<string, string>();
+    for (const [key, files] of moduleMap.entries()) {
+      for (const f of files) fileToComponent.set(normalizePath(f.filePath), keyToId(key));
+    }
+    const calleesByFile = new Map<string, Set<string>>();
+    if (context.fileEdges) {
+      for (const e of context.fileEdges) {
+        const set = calleesByFile.get(e.from) || new Set<string>();
+        set.add(e.to);
+        calleesByFile.set(e.from, set);
+      }
     }
 
     const components: ArchitectureComponent[] = [];
@@ -618,24 +755,8 @@ export class ArchitectureClusterer {
         ? WasteDetector.getComponentWaste(componentPaths, wasteResult.fileWaste)
         : undefined;
 
-      // Classify layer from directory keywords
-      let layerId = 'layer_domain';
-      let color = 'blue';
-
-      const keyLower = moduleKey.toLowerCase();
-      if (/db|database|sqlite|sql|store|storage|models?|schemas?|native|fs|io|mount|config|foundation/.test(keyLower)) {
-        layerId = layers[0]?.id || 'layer_foundation';
-        color = 'blue';
-      } else if (/ai|ml|onnx|perception|vision|search|engine|service|pipeline|worker|algo|detector|analysis/.test(keyLower)) {
-        layerId = layers[1]?.id || 'layer_domain';
-        color = 'cyan';
-      } else if (/ipc|bridge|preload|router|controller|state|zustand|redux|middleware|hook|events?/.test(keyLower)) {
-        layerId = layers[2]?.id || 'layer_state_ipc';
-        color = 'emerald';
-      } else if (/component|ui|view|page|panel|dock|dialog|modal|screen|card|cli|command|presentation/.test(keyLower)) {
-        layerId = layers[3]?.id || 'layer_presentation';
-        color = 'rose';
-      }
+      // Classify layer from config globs, tooling role, folder keywords and runtime markers
+      const { layerId, color, layerSource } = ArchitectureClusterer.classifyModuleLayer(moduleKey, files, layers, context);
 
       // Format clean component name
       const cleanName = moduleKey
@@ -647,11 +768,20 @@ export class ArchitectureClusterer {
 
       // Deduce caller/callee links from imports across components
       const callees = new Set<string>();
-      for (const f of files) {
-        for (const imp of f.imports || []) {
-          for (const [otherKey] of moduleMap.entries()) {
-            if (otherKey !== moduleKey && imp.includes(otherKey)) {
-              callees.add(`comp_${otherKey.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`);
+      if (context.fileEdges) {
+        for (const f of files) {
+          for (const target of calleesByFile.get(normalizePath(f.filePath)) || []) {
+            const targetId = fileToComponent.get(target);
+            if (targetId && targetId !== compId) callees.add(targetId);
+          }
+        }
+      } else {
+        for (const f of files) {
+          for (const imp of f.imports || []) {
+            for (const [otherKey] of moduleMap.entries()) {
+              if (otherKey !== moduleKey && imp.includes(otherKey)) {
+                callees.add(keyToId(otherKey));
+              }
             }
           }
         }
@@ -661,6 +791,7 @@ export class ArchitectureClusterer {
         id: compId,
         name: cleanName,
         layerId,
+        layerSource,
         priority: priorityCounter++,
         description: `Architectural module covering ${files.length} file(s) in ${moduleKey}.`,
         color,
@@ -728,7 +859,15 @@ export class ArchitectureClusterer {
 
         // Find which components these tests exercise (callees)
         const verifiedComponentIds = new Set<string>();
-        for (const tf of tFiles) {
+        if (context.fileEdges) {
+          for (const tf of tFiles) {
+            for (const target of calleesByFile.get(normalizePath(tf.filePath)) || []) {
+              const targetId = fileToComponent.get(target);
+              if (targetId) verifiedComponentIds.add(targetId);
+            }
+          }
+        }
+        for (const tf of context.fileEdges ? [] : tFiles) {
           for (const imp of tf.imports || []) {
             for (const comp of components) {
               if (comp.files.some((f) => imp.includes(f.path.replace(/\.[^/.]+$/, '')))) {
@@ -739,7 +878,7 @@ export class ArchitectureClusterer {
         }
 
         // Correlate by name matching if imports didn't resolve directly
-        if (verifiedComponentIds.size === 0) {
+        if (verifiedComponentIds.size === 0 && !context.fileEdges) {
           for (const comp of components) {
             const compBase = comp.id.replace('comp_', '');
             if (testKey.toLowerCase().includes(compBase) || compBase.includes(testKey.toLowerCase())) {
@@ -749,7 +888,7 @@ export class ArchitectureClusterer {
         }
 
         // Default to first component if still empty
-        if (verifiedComponentIds.size === 0 && components.length > 0) {
+        if (verifiedComponentIds.size === 0 && components.length > 0 && !context.fileEdges) {
           verifiedComponentIds.add(components[0].id);
         }
 
@@ -824,6 +963,8 @@ export class ArchitectureClusterer {
         comp.anatomy.callers =
           comp.layerId === 'layer_verification' || comp.layerId === 'layer_4_tests'
             ? ['CI/CD Pipeline']
+            : comp.layerId === 'layer_tooling'
+            ? ['Build / npm scripts']
             : ['Root Application'];
       }
     }

@@ -1,0 +1,8 @@
+{
+  "name": "runtimes",
+  "private": true,
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  }
+}

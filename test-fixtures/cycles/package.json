@@ -1,0 +1,5 @@
+{
+  "name": "cycles",
+  "private": true,
+  "main": "src/index.ts"
+}
