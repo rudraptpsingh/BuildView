@@ -6,11 +6,17 @@ import { RepoParser } from './parser/repo-parser.js';
 import { WasteDetector, WasteAnalysisResult } from './parser/waste-detector.js';
 import { ArchitectureClusterer } from './parser/architecture-clusterer.js';
 import { ArchitectureRulesEngine, ArchitectureRuleAnalysisResult } from './parser/architecture-rules.js';
-import { BuildViewConfig, loadBuildViewConfig } from './analysis/config.js';
+import { DesignRulesEngine } from './analysis/design-rules.js';
+import { PerformanceLinter } from './analysis/performance-lint.js';
+import { ElectronAnalyzer } from './analysis/electron-analyzer.js';
+import { ReachabilityAnalyzer, ReachabilityResult } from './analysis/reachability-analyzer.js';
+import { RatchetManager } from './analysis/ratchet-manager.js';
+import { BuildViewConfig, loadBuildViewConfig, validateConfig } from './analysis/config.js';
 import { classifyFileRole, collectEntryPoints, detectRuntimes } from './analysis/file-roles.js';
 import { ImportResolver } from './analysis/import-resolver.js';
 import { buildFileEdges, FileClassification, FileEdge } from './analysis/dependency-graph.js';
 import { normalizePath } from './analysis/glob.js';
+import { ArchitectureScorer } from './analysis/scorer.js';
 
 export interface ScanOptions {
   projectName?: string;
@@ -31,6 +37,7 @@ export interface DetailedScanResult {
   project: BuildViewProject;
   waste: WasteAnalysisResult;
   rules: ArchitectureRuleAnalysisResult;
+  reachability: ReachabilityResult;
   fileEdges: FileEdge[];
   fileInfo: Map<string, FileClassification>;
   config: BuildViewConfig;
@@ -91,15 +98,21 @@ export class RepoScannerService {
     }
 
     const loaded = options.config
-      ? { config: options.config, source: null }
+      ? { config: validateConfig(options.config), source: null }
       : loadBuildViewConfig(resolvedPath, options.configPath);
     const config = loaded.config;
 
-    // 1. AST scan of source files and test files
+    // 1. AST scan of source files and test files (with persistent disk cache)
+    const cacheDir = path.join(resolvedPath, 'node_modules', '.cache', 'buildview');
+    const cacheFile = path.join(cacheDir, 'ast-cache.json');
+    RepoParser.loadDiskCache(cacheFile);
+
     const repoScan = RepoParser.scanRepository(resolvedPath, {
       testGlobs: config.testGlobs,
       ignoreGlobs: config.ignoreGlobs,
     });
+
+    RepoParser.saveDiskCache(cacheFile);
 
     // 2. Classify files (product / test / tooling) and their runtimes, then resolve every import
     const fileInfo = new Map<string, FileClassification>();
@@ -197,6 +210,43 @@ export class RepoScannerService {
       }
     }
 
+    // 6b. Design Rules, Token Compliance & Testid Reachability
+    const designAnalysis = DesignRulesEngine.analyzeDesignRules(resolvedPath, components);
+    if (designAnalysis.gaps.length > 0) {
+      for (const gap of designAnalysis.gaps) {
+        const targetComp = components.find((c) => c.layerId === 'layer_presentation') || components[0];
+        if (targetComp) targetComp.gaps.push(gap);
+      }
+    }
+
+    // 6c. Performance Hotpath Linter (Blocking synchronous I/O and event loop stalls)
+    const perfAnalysis = PerformanceLinter.analyzePerformance(resolvedPath, components);
+    if (perfAnalysis.gaps.length > 0) {
+      for (const gap of perfAnalysis.gaps) {
+        const targetComp = components.find((c) => c.layerId === 'layer_presentation') || components[0];
+        if (targetComp) targetComp.gaps.push(gap);
+      }
+    }
+
+    // 6d. Electron Process Topology, Preload Surface & Security Invariants
+    const electronAnalysis = ElectronAnalyzer.analyzeElectronApp(resolvedPath, components);
+    if (electronAnalysis.gaps.length > 0) {
+      for (const gap of electronAnalysis.gaps) {
+        const targetComp = components.find((c) => c.layerId === 'layer_presentation' || c.id.includes('electron')) || components[0];
+        if (targetComp) targetComp.gaps.push(gap);
+      }
+    }
+
+    // 6e. Whole-Repo Reachability (Unmounted UI components, orphan preload bridge APIs, phantom testids)
+    const allParsedFiles = repoScan.sourceFiles.concat(repoScan.testFiles);
+    const reachabilityAnalysis = ReachabilityAnalyzer.analyzeReachability(resolvedPath, allParsedFiles, fileEdges);
+    if (reachabilityAnalysis.gaps.length > 0) {
+      for (const gap of reachabilityAnalysis.gaps) {
+        const targetComp = components.find((c) => c.layerId === 'layer_presentation') || components[0];
+        if (targetComp) targetComp.gaps.push(gap);
+      }
+    }
+
     const project: BuildViewProject = {
       id: `proj_${projectName.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`,
       name: projectName,
@@ -207,6 +257,8 @@ export class RepoScannerService {
       figmaBridge: figmaBridgeSummary,
       lastUpdated: new Date().toISOString(),
     };
+
+    project.healthScore = ArchitectureScorer.calculateHealthScore(project, wasteAnalysis, ruleAnalysis);
 
     // 7. Write out architecture map JSON artifact (in the target repository unless redirected)
     let artifactPath: string | null = null;
@@ -230,6 +282,7 @@ export class RepoScannerService {
       project,
       waste: wasteAnalysis,
       rules: ruleAnalysis,
+      reachability: reachabilityAnalysis,
       fileEdges,
       fileInfo,
       config,

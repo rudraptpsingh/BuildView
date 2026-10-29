@@ -43,6 +43,7 @@
     "scan": "tsx src/cli/index.ts scan",
     "check": "tsx src/cli/index.ts check",
     "mcp": "tsx src/server/mcp-standalone.ts",
+    "benchmark": "tsx src/examples/benchmark-scenarios.ts",
     "example:simulate": "tsx src/examples/simulate-cli.ts",
     "scan:sample": "tsx src/examples/scan-sample.ts"
   },

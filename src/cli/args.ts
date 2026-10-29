@@ -1,5 +1,5 @@
 export interface CliArgs {
-  command: 'scan' | 'plan' | 'check';
+  command: 'scan' | 'plan' | 'check' | 'remediate' | 'ratchet' | 'reachability';
   target: string;
   json: boolean;
   out?: string;
@@ -10,9 +10,24 @@ export interface CliArgs {
   maxSeverity?: string;
   baseline?: string;
   updateBaseline: boolean;
+  mode?: string;
+  gapId?: string;
+  format?: string;
+  budget?: string;
 }
 
-const VALUE_FLAGS = new Set(['--out', '--config', '--port', '--fail-on', '--max-severity', '--baseline']);
+const VALUE_FLAGS = new Set([
+  '--out',
+  '--config',
+  '--port',
+  '--fail-on',
+  '--max-severity',
+  '--baseline',
+  '--mode',
+  '--gap-id',
+  '--format',
+  '--budget',
+]);
 
 export function parseCliArgs(argv: string[]): CliArgs | 'help' {
   const args: CliArgs = { command: 'scan', target: '.', json: false, noWrite: false, updateBaseline: false };
@@ -29,7 +44,7 @@ export function parseCliArgs(argv: string[]): CliArgs | 'help' {
     if (VALUE_FLAGS.has(a)) {
       if (value === undefined) value = argv[++i];
       if (value === undefined || value.startsWith('--')) throw new Error(`${a} needs a value`);
-      const key = a.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase()) as 'out' | 'config' | 'port' | 'failOn' | 'maxSeverity' | 'baseline';
+      const key = a.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase()) as 'out' | 'config' | 'port' | 'failOn' | 'maxSeverity' | 'baseline' | 'mode';
       args[key] = value;
     } else if (a === '--json') {
       args.json = true;
@@ -43,7 +58,8 @@ export function parseCliArgs(argv: string[]): CliArgs | 'help' {
       positionals.push(a);
     }
   }
-  if (positionals[0] === 'scan' || positionals[0] === 'check' || positionals[0] === 'plan') {
+  const knownCommands = new Set(['scan', 'check', 'plan', 'remediate', 'ratchet', 'reachability']);
+  if (knownCommands.has(positionals[0])) {
     args.command = positionals.shift() as CliArgs['command'];
   }
   if (positionals[0]) args.target = positionals[0];

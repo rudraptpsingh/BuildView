@@ -61,7 +61,48 @@ export interface ParseFileOptions {
   isTestFile?: boolean;
 }
 
+export interface FileCacheEntry {
+  mtimeMs: number;
+  size: number;
+  parsed: ParsedFileResult;
+}
+
 export class RepoParser {
+  private static fileCache = new Map<string, FileCacheEntry>();
+
+  public static clearCache(): void {
+    RepoParser.fileCache.clear();
+  }
+
+  public static loadDiskCache(cacheFilePath: string): void {
+    try {
+      if (!fs.existsSync(cacheFilePath)) return;
+      const raw = fs.readFileSync(cacheFilePath, 'utf-8');
+      const data = JSON.parse(raw);
+      if (data && typeof data === 'object') {
+        for (const [k, v] of Object.entries(data)) {
+          RepoParser.fileCache.set(k, v as FileCacheEntry);
+        }
+      }
+    } catch {
+      // Non-fatal if cache read fails
+    }
+  }
+
+  public static saveDiskCache(cacheFilePath: string): void {
+    try {
+      const dir = path.dirname(cacheFilePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const obj: Record<string, FileCacheEntry> = {};
+      for (const [k, v] of RepoParser.fileCache.entries()) {
+        obj[k] = v;
+      }
+      fs.writeFileSync(cacheFilePath, JSON.stringify(obj), 'utf-8');
+    } catch {
+      // Non-fatal if cache write fails
+    }
+  }
+
   /**
    * Parses an individual TypeScript/JavaScript source or test file using the TypeScript AST compiler.
    */
@@ -619,10 +660,22 @@ export class RepoParser {
               const stat = fs.statSync(fullPath);
               if (stat.size > 1024 * 1024) continue; // skip files > 1MB
 
-              const content = fs.readFileSync(fullPath, 'utf-8');
-              const parsed = RepoParser.parseFile(relativePath, content, {
-                isTestFile: isTestPath(relativePath, options.testGlobs),
-              });
+              const cached = RepoParser.fileCache.get(fullPath);
+              let parsed: ParsedFileResult;
+              if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+                parsed = cached.parsed;
+              } else {
+                const content = fs.readFileSync(fullPath, 'utf-8');
+                parsed = RepoParser.parseFile(relativePath, content, {
+                  isTestFile: isTestPath(relativePath, options.testGlobs),
+                });
+                RepoParser.fileCache.set(fullPath, {
+                  mtimeMs: stat.mtimeMs,
+                  size: stat.size,
+                  parsed,
+                });
+              }
+
               if (parsed.isTestFile) {
                 testFiles.push(parsed);
               } else {

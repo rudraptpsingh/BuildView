@@ -538,5 +538,452 @@ export function createBuildViewMcpServer(store: BuildViewStore) {
     }
   );
 
+  // Tool 11: Get Multi-Dimensional Architectural Health Score & Remediation Plan
+  server.tool(
+    'buildview_get_health_score',
+    'Get multi-dimensional Architectural Health Score (Architecture Invariants, Code Cleanliness, Test Verification, Modularity), letter grade, and prioritized remediation actions',
+    {
+      repoPath: z.string().optional().describe('Optional repository directory to scan and evaluate; defaults to active store project'),
+    },
+    async (args) => {
+      try {
+        let project = store.getProject();
+        if (args.repoPath) {
+          const detailed = await RepoScannerService.scanRepositoryDetailed(store, args.repoPath, { outputPath: false });
+          project = detailed.project;
+        }
+
+        const score = project.healthScore;
+        if (!score) {
+          return {
+            content: [{ type: 'text', text: 'No health score calculated yet. Scan the repository first using buildview_scan_repo.' }],
+          };
+        }
+
+        const outputLines = [
+          `# 🎖️ Architectural Health Scorecard: ${score.overallScore}/100 [Grade: ${score.grade}]`,
+          '',
+          `### 1. ${score.dimensions.architecture.name} (Weight 35%): **${score.dimensions.architecture.score}/100**`,
+          `> ${score.dimensions.architecture.summary}`,
+          ...score.dimensions.architecture.deductions.slice(0, 3).map((d) => `  - [-${d.penalty} pts] ${d.reason}${d.file ? ` (${d.file}:${d.line || 0})` : ''}`),
+          '',
+          `### 2. ${score.dimensions.cleanliness.name} (Weight 25%): **${score.dimensions.cleanliness.score}/100**`,
+          `> ${score.dimensions.cleanliness.summary}`,
+          ...score.dimensions.cleanliness.deductions.slice(0, 3).map((d) => `  - [-${d.penalty} pts] ${d.reason}`),
+          '',
+          `### 3. ${score.dimensions.verification.name} (Weight 25%): **${score.dimensions.verification.score}/100**`,
+          `> ${score.dimensions.verification.summary}`,
+          ...score.dimensions.verification.deductions.slice(0, 3).map((d) => `  - [-${d.penalty} pts] ${d.reason}`),
+          '',
+          `### 4. ${score.dimensions.modularity.name} (Weight 15%): **${score.dimensions.modularity.score}/100**`,
+          `> ${score.dimensions.modularity.summary}`,
+          ...score.dimensions.modularity.deductions.slice(0, 3).map((d) => `  - [-${d.penalty} pts] ${d.reason}`),
+          '',
+          '---',
+          '### 🎯 Highest-ROI Remediation Actions:',
+          ...(score.remediationPlan.length > 0
+            ? score.remediationPlan.slice(0, 5).map((r, i) => `${i + 1}. [Priority ${r.priority} | +${r.impactScorePoints} pts] **${r.title}**: ${r.description}`)
+            : ['- None. Architecture is in pristine health!']),
+        ];
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: outputLines.join('\n'),
+            },
+          ],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Failed to compute health score: ${err.message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 12: Evaluate Agent Run Delta & Regressions
+  server.tool(
+    'buildview_evaluate_agent_delta',
+    'Compare current repository AST against baseline to verify if agent changes improved or regressed architectural health, with exact regressions and token savings',
+    {
+      repoPath: z.string().describe('Target repository directory to evaluate'),
+      baselineConfigPath: z.string().optional().describe('Optional custom config path'),
+    },
+    async (args) => {
+      try {
+        const { BenchmarkEvaluator } = await import('./analysis/benchmark-evaluator.js');
+        const detailed = await RepoScannerService.scanRepositoryDetailed(store, args.repoPath, { outputPath: false });
+
+        // Simulate evaluation of current project against baseline
+        const score = detailed.project.healthScore;
+        const evaluation = BenchmarkEvaluator.evaluateAgentRun({
+          projectBefore: detailed.project,
+          wasteBefore: { ...detailed.waste, allUnusedExports: [] },
+          rulesBefore: { ...detailed.rules, violations: [] },
+          projectAfter: detailed.project,
+          wasteAfter: detailed.waste,
+          rulesAfter: detailed.rules,
+        });
+
+        const outputMarkdown = [
+          `# 🧪 Agent Benchmark & Delta Evaluation: ${evaluation.verdict.toUpperCase()}`,
+          `**Current Score:** ${score?.overallScore || 0}/100 [Grade: ${score?.grade || 'N/A'}]`,
+          `**Active Regressions / Invariants Violated:** ${evaluation.regressionsIntroduced.length}`,
+          ...evaluation.regressionsIntroduced.slice(0, 5).map((r) => `- [${r.severity.toUpperCase()}] ${r.message}`),
+          '',
+          `**Token Efficiency:** ~${evaluation.tokenSavingsEstimate.tokensSaved.toLocaleString()} tokens saved using BuildView contracts (${evaluation.tokenSavingsEstimate.savingsPercent}% reduction vs reading raw files)`,
+        ].join('\n');
+
+        return {
+          content: [{ type: 'text', text: outputMarkdown }],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Failed to evaluate agent delta: ${err.message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 13: Get AI Agent Surgical Remediation Card (Token-Budgeted)
+  server.tool(
+    'buildview_get_remediation_card',
+    'Generate a minimal, token-budgeted prompt card (~400 tokens) for an AI coding agent to fix an architectural gap without polluting context with full repo dumps',
+    {
+      repoPath: z.string().describe('Target repository directory'),
+      gapId: z.string().optional().describe('Specific gap ID to remediate, or omit for highest-priority gap'),
+      tokenBudget: z.number().optional().describe('Maximum tokens allowed for the generated prompt card (default: 450)'),
+    },
+    async (args) => {
+      try {
+        const { AgentRemediationEngine } = await import('./analysis/agent-remediation.js');
+        const detailed = await RepoScannerService.scanRepositoryDetailed(store, args.repoPath, { outputPath: false });
+        const allGaps = detailed.project.components.flatMap((c) => c.gaps.filter((g) => !g.resolved));
+
+        if (allGaps.length === 0) {
+          return {
+            content: [{ type: 'text', text: `✅ Codebase is architecture clean! No unresolved gaps detected in ${detailed.project.name}.` }],
+          };
+        }
+
+        let targetGap = allGaps[0];
+        if (args.gapId) {
+          const found = allGaps.find((g) => g.id === args.gapId);
+          if (found) targetGap = found;
+        } else {
+          const severityOrder: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+          allGaps.sort((a, b) => (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0));
+          targetGap = allGaps[0];
+        }
+
+        const card = AgentRemediationEngine.generateCard(targetGap, {
+          tokenBudget: args.tokenBudget || 450,
+          verificationCmd: 'npx buildview check',
+        });
+
+        const text = [
+          `# 🤖 Agent Remediation Card [${card.gapId}] (${card.tokenCostEstimate} tokens)`,
+          `> Context efficiency: Saved ~${card.tokenSavingsVsRawDump.toLocaleString()} tokens vs reading whole files.\n`,
+          card.agentPromptText,
+        ].join('\n');
+
+        return {
+          content: [{ type: 'text', text }],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Failed to generate remediation card: ${err.message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 14: Check Performance Hotpaths (EST / TTFP Static Linter)
+  server.tool(
+    'buildview_check_performance',
+    'Detect synchronous blocking I/O (fs.readFileSync, execSync, ipcRenderer.sendSync) on UI render and Electron startup hotpaths that spike Event Loop Stall Time (EST) and TTFP',
+    {
+      repoPath: z.string().describe('Target repository directory to analyze'),
+    },
+    async (args) => {
+      try {
+        const { PerformanceLinter } = await import('./analysis/performance-lint.js');
+        const detailed = await RepoScannerService.scanRepositoryDetailed(store, args.repoPath, { outputPath: false });
+        const perfResult = PerformanceLinter.analyzePerformance(args.repoPath, detailed.project.components);
+
+        const lines: string[] = [
+          `# ⚡ Performance Hotpath Audit: ${detailed.project.name}`,
+          `**Total Blocking Violations:** ${perfResult.metrics.totalViolations}`,
+          `- Sync FS in UI: ${perfResult.metrics.syncFsInUiCount}`,
+          `- Sync child_process Exec: ${perfResult.metrics.syncExecCount}`,
+          `- Sync IPC (sendSync): ${perfResult.metrics.syncIpcCount}`,
+          '',
+        ];
+
+        if (perfResult.violations.length === 0) {
+          lines.push('✅ Zero blocking synchronous I/O or IPC detected on UI hotpaths.');
+        } else {
+          lines.push('### Top Violations:');
+          for (const v of perfResult.violations.slice(0, 10)) {
+            lines.push(`- **[${v.severity.toUpperCase()}]** \`${v.file}:${v.line}\` - ${v.message}`);
+            lines.push(`  *Fix:* ${v.remediation}`);
+          }
+        }
+
+        return {
+          content: [{ type: 'text', text: lines.join('\n') }],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Failed to run performance audit: ${err.message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 15: Check Design System Tokens & Testid Reachability
+  server.tool(
+    'buildview_check_design_tokens',
+    'Audit repository UI components for design system token compliance (raw color literals, off-scale heights/type) and data-testid reachability',
+    {
+      repoPath: z.string().describe('Target repository directory to analyze'),
+    },
+    async (args) => {
+      try {
+        const { DesignRulesEngine } = await import('./analysis/design-rules.js');
+        const detailed = await RepoScannerService.scanRepositoryDetailed(store, args.repoPath, { outputPath: false });
+        const designResult = DesignRulesEngine.analyzeDesignRules(args.repoPath, detailed.project.components);
+
+        const lines: string[] = [
+          `# 🎨 Design System & Token Hygiene Audit: ${detailed.project.name}`,
+          `**Color Literals:** ${designResult.metrics.totalColorLiterals}`,
+          `**Off-Scale Control Heights:** ${designResult.metrics.totalOffScaleHeights}`,
+          `**Off-Scale Type Sizes:** ${designResult.metrics.totalOffScaleTypeSizes}`,
+          `**Components Missing data-testid:** ${designResult.metrics.totalMissingTestIds}`,
+          `**Figma Mapped Components:** ${designResult.metrics.totalFigmaMappedComponents}`,
+          '',
+        ];
+
+        if (designResult.violations.length === 0) {
+          lines.push('✅ All presentation components comply with design tokens and testability standards.');
+        } else {
+          lines.push('### Top Design Violations:');
+          for (const v of designResult.violations.slice(0, 10)) {
+            lines.push(`- **[${v.severity.toUpperCase()}]** \`${v.file}\` - ${v.message}`);
+          }
+        }
+
+        return {
+          content: [{ type: 'text', text: lines.join('\n') }],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Failed to run design tokens audit: ${err.message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 16: Audit Electron Process Topology & IPC Channels
+  server.tool(
+    'buildview_audit_electron',
+    'Audit an Electron application process boundaries, IPC channel contract symmetry, preload surface area, and webPreferences security',
+    {
+      repoPath: z.string().describe('Target Electron repository directory to analyze'),
+    },
+    async (args) => {
+      try {
+        const { ElectronAnalyzer } = await import('./analysis/electron-analyzer.js');
+        const detailed = await RepoScannerService.scanRepositoryDetailed(store, args.repoPath, { outputPath: false });
+        const result = ElectronAnalyzer.analyzeElectronApp(args.repoPath, detailed.project.components);
+
+        if (!result.metrics.isElectronApp) {
+          return {
+            content: [{ type: 'text', text: `ℹ️ Repository at "${args.repoPath}" is not an Electron application.` }],
+          };
+        }
+
+        const lines: string[] = [
+          `# ⚡ Electron Process & IPC Architecture Audit: ${detailed.project.name}`,
+          `**Total IPC Channels Mapped:** ${result.metrics.totalIpcChannels}`,
+          `**Preload Exposed Methods:** ${result.metrics.totalPreloadExposedMethods}`,
+          `**Preload Files:** ${result.metrics.preloadFiles.length}`,
+          `**Main Process Files:** ${result.metrics.mainProcessFiles.length}`,
+          '',
+          `### Security Invariants:`,
+          `- Context Isolation: ${result.metrics.security.contextIsolationExplicit ? '✅ Explicitly enabled' : '⚠️ Not explicitly configured'}`,
+          `- Node Integration Disabled: ${result.metrics.security.nodeIntegrationDisabled ? '✅ Explicitly disabled' : '⚠️ Not explicitly configured'}`,
+          `- Insecure WebPreferences Violations: ${result.metrics.security.insecurePatterns.length}`,
+          '',
+        ];
+
+        if (result.metrics.unhandledIpcChannels.length > 0) {
+          lines.push(`### Unhandled / Dangling IPC Channels (${result.metrics.unhandledIpcChannels.length}):`);
+          for (const ch of result.metrics.unhandledIpcChannels.slice(0, 10)) {
+            lines.push(`- \`${ch}\` (invoked in preload, missing static main handler)`);
+          }
+          if (result.metrics.unhandledIpcChannels.length > 10) {
+            lines.push(`  ... and ${result.metrics.unhandledIpcChannels.length - 10} more`);
+          }
+          lines.push('');
+        }
+
+        if (result.gaps.length > 0) {
+          lines.push(`### Architectural Gaps:`);
+          for (const gap of result.gaps) {
+            lines.push(`- **[${gap.severity.toUpperCase()}]** ${gap.title}`);
+            lines.push(`  *Remediation:* ${gap.resolutionNote || gap.description}`);
+          }
+        } else {
+          lines.push('✅ No critical Electron process or security gaps detected.');
+        }
+
+        return {
+          content: [{ type: 'text', text: lines.join('\n') }],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Failed to audit Electron application: ${err.message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 22: Architectural Monotonic Ratchet Check
+  server.tool(
+    'buildview_check_ratchet',
+    'Enforce monotonic architectural debt reduction across design tokens, control heights, type scale, icon scale, arbitrary classes, and blocking I/O',
+    {
+      repoPath: z.string().describe('Target repository path'),
+      mode: z.enum(['enforce', 'update', 'report']).optional().describe('Ratchet mode (default: enforce)'),
+      baselineFile: z.string().optional().describe('Custom baseline filename (default: .buildview-baseline.json)'),
+    },
+    async (args) => {
+      try {
+        const { RatchetManager } = await import('./analysis/ratchet-manager.js');
+        const { DesignRulesEngine } = await import('./analysis/design-rules.js');
+        const { PerformanceLinter } = await import('./analysis/performance-lint.js');
+
+        const detailed = await RepoScannerService.scanRepositoryDetailed(store, args.repoPath, { outputPath: false });
+        const designRes = DesignRulesEngine.analyzeDesignRules(args.repoPath, detailed.project.components, { enforceTestIds: true });
+        const perfRes = PerformanceLinter.analyzePerformance(args.repoPath, detailed.project.components);
+
+        const currentTotals = {
+          colorLiterals: designRes.metrics.totalColorLiterals,
+          offScaleHeights: designRes.metrics.totalOffScaleHeights,
+          offScaleTypeSizes: designRes.metrics.totalOffScaleTypeSizes,
+          iconLiterals: designRes.metrics.totalIconLiterals,
+          arbitraryClasses: designRes.metrics.totalArbitraryClasses,
+          unmergedDynamicClasses: designRes.metrics.totalUnmergedDynamicClasses,
+          syncIoCalls: perfRes.metrics.syncFsInUiCount + perfRes.metrics.syncExecCount + perfRes.metrics.syncIpcCount,
+          missingTestIds: designRes.metrics.totalMissingTestIds,
+        };
+
+        const result = RatchetManager.checkRatchet(args.repoPath, currentTotals, {
+          mode: args.mode || 'enforce',
+          baselineFile: args.baselineFile,
+        });
+
+        const lines: string[] = [
+          `# 📊 BuildView Architectural Ratchet: ${detailed.project.name}`,
+          `**Status:** ${result.passed ? '✅ PASSED' : '❌ FAILED (REGRESSION)'}`,
+          `**Baseline File:** \`${result.baselinePath}\``,
+          `**Summary:** ${result.summary}`,
+          '',
+          '### Debt Metrics Comparison:',
+        ];
+
+        for (const d of result.deltas) {
+          const icon = d.status === 'regressed' ? '❌' : d.status === 'improved' ? '✨' : '🔹';
+          const sign = d.delta > 0 ? `+${d.delta}` : `${d.delta}`;
+          lines.push(`- ${icon} **${d.category}**: current ${d.current} | baseline ${d.baseline} | delta: **${sign}**`);
+        }
+
+        return {
+          content: [{ type: 'text', text: lines.join('\n') }],
+          isError: !result.passed,
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Failed to check architectural ratchet: ${err.message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 23: Whole-Repo Reachability & Liveness Audit
+  server.tool(
+    'buildview_check_reachability',
+    'Audit whole-repo DAG reachability to detect unmounted UI components, orphan Electron preload bridge methods, and phantom E2E testids',
+    {
+      repoPath: z.string().describe('Target repository path'),
+      customEntrypoints: z.array(z.string()).optional().describe('Optional custom entrypoints (default: auto-detected main/App/preload)'),
+    },
+    async (args) => {
+      try {
+        const { ReachabilityAnalyzer } = await import('./analysis/reachability-analyzer.js');
+        const detailed = await RepoScannerService.scanRepositoryDetailed(store, args.repoPath, { outputPath: false });
+        const result = detailed.reachability || ReachabilityAnalyzer.analyzeReachability(
+          args.repoPath,
+          [],
+          detailed.fileEdges,
+          args.customEntrypoints
+        );
+
+        const lines: string[] = [
+          `# 🔍 Whole-Repo Reachability & Liveness Audit: ${detailed.project.name}`,
+          `**Entrypoints:** ${result.entrypoints.join(', ')}`,
+          `**Product Files:** ${result.metrics.totalProductFiles} total, ${result.metrics.totalReachableFiles} reachable`,
+          '',
+          `### 👻 Unmounted Dead UI Components (${result.metrics.totalUnmountedComponents}):`,
+        ];
+
+        for (const u of result.unmountedComponents.slice(0, 10)) {
+          lines.push(`- **${u.name}** (\`${u.file}\`) — ${u.linesOfCode} lines, testids: [${u.testids.join(', ')}]`);
+        }
+        if (result.unmountedComponents.length > 10) {
+          lines.push(`  ... and ${result.unmountedComponents.length - 10} more`);
+        }
+
+        lines.push('');
+        lines.push(`### 🌉 Orphan Preload Bridge APIs (${result.metrics.totalOrphanPreloadMethods}):`);
+        for (const o of result.orphanPreloadMethods.slice(0, 10)) {
+          lines.push(`- \`window.electronAPI.${o.method}\` — 0 callers in renderer`);
+        }
+        if (result.orphanPreloadMethods.length > 10) {
+          lines.push(`  ... and ${result.orphanPreloadMethods.length - 10} more`);
+        }
+
+        lines.push('');
+        lines.push(`### 🎯 Phantom E2E TestIDs (${result.metrics.totalPhantomTestIds}):`);
+        for (const p of result.phantomTestIds.slice(0, 10)) {
+          lines.push(`- \`"${p.testId}"\` queried in \`${p.specFile}\`${p.definedInUnmountedFile ? ` (in unmounted \`${p.definedInUnmountedFile}\`)` : ''}`);
+        }
+        if (result.phantomTestIds.length > 10) {
+          lines.push(`  ... and ${result.phantomTestIds.length - 10} more`);
+        }
+
+        return {
+          content: [{ type: 'text', text: lines.join('\n') }],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Failed to check reachability: ${err.message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
   return server;
 }
+
+

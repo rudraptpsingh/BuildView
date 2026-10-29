@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-29T09:46:26.298Z",
+  "totals": {
+    "colorLiterals": 209,
+    "offScaleHeights": 3,
+    "offScaleTypeSizes": 106,
+    "iconLiterals": 0,
+    "arbitraryClasses": 8,
+    "unmergedDynamicClasses": 49,
+    "syncIoCalls": 0,
+    "missingTestIds": 15
+  }
+}

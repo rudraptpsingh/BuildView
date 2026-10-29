@@ -12,8 +12,13 @@ import {
   resolveFailThreshold,
   resolvePort,
   writeBaseline,
+  ReportedGap,
 } from './report.js';
 import { CliArgs, parseCliArgs } from './args.js';
+import { AgentRemediationEngine } from '../server/analysis/agent-remediation.js';
+import { RatchetManager, type BuildViewRatchetTotals } from '../server/analysis/ratchet-manager.js';
+import { DesignRulesEngine } from '../server/analysis/design-rules.js';
+import { PerformanceLinter } from '../server/analysis/performance-lint.js';
 
 const USAGE = `
 BuildView CLI — Autonomous Architecture Mapping, Invariant & Change Planning Tool
@@ -22,16 +27,23 @@ Usage:
   npx buildview [command] [options] [target-directory]
 
 Commands:
-  scan [dir]     Scan codebase AST, detect dead code waste, and build DAG architecture map (default)
-  plan [dir]     Plan technical architecture changes, calculate blast radius & migration steps
-  check [dir]    Verify clean layer boundaries & circular dependency rules (CI/CD mode)
-  help           Display this help screen
+  scan [dir]         Scan codebase AST, detect dead code waste, and build DAG architecture map (default)
+  plan [dir]         Plan technical architecture changes, calculate blast radius & migration steps
+  check [dir]        Verify clean layer boundaries & circular dependency rules (CI/CD mode)
+  ratchet [dir]      Enforce monotonic architectural debt reduction across tokens, classes, and I/O
+  reachability [dir] Detect unmounted UI components, orphan preload bridge methods, and phantom testids
+  remediate [dir]    Generate token-budgeted surgical prompt cards for AI coding agents
+  help               Display this help screen
 
 Options:
   --out <file>             Write the architecture artifact here (default: <dir>/buildview-architecture.json)
   --no-write               Do not write the architecture artifact
   --config <file>          Config file to use instead of buildview.config.json / package.json#buildview
   --port <n>               Dashboard port to print (default: $BUILDVIEW_PORT or 3333)
+
+ratchet options:
+  --mode <enforce|update|report>  Enforce monotonic drop, update baseline, or report deltas (default: enforce)
+  --baseline <file>               Baseline file to track (default: .buildview-baseline.json)
 
 check options:
   --json                   Print a machine-readable report on stdout (nothing else)
@@ -40,11 +52,17 @@ check options:
   --baseline <file>        Ignore gaps already listed in this baseline file; only new gaps fail
   --update-baseline        Write the current gaps to the --baseline file and exit 0
 
+remediate options:
+  --gap-id <id>            Generate card for a specific gap ID (default: highest severity unresolved gap)
+  --format <agent-prompt|json>  Output format (default: agent-prompt)
+  --budget <tokens>        Maximum prompt token budget (default: 450)
+
 Examples:
   npx buildview scan .
-  npx buildview plan .
+  npx buildview ratchet . --mode=enforce
+  npx buildview reachability .
   npx buildview check . --fail-on high
-  npx buildview check . --json --baseline buildview-baseline.json
+  npx buildview remediate . --gap-id gap_cycle_1
 `;
 
 async function run() {
@@ -102,6 +120,9 @@ async function run() {
     log(`🔢 Lines of Code Tracked: ${totalLines.toLocaleString()}`);
     log(`🧪 Tests Correlated: ${totalTests}`);
     log(`⚠️ Active Gaps & Invariants: ${unresolvedGaps.length}`);
+    if (project.healthScore) {
+      log(`🎖️ Architectural Health: ${project.healthScore.overallScore}/100 [Grade: ${project.healthScore.grade}]`);
+    }
 
     if (project.figmaBridge && project.figmaBridge.totalMappedComponents > 0) {
       log(`🎨 Design System Mappings: ${project.figmaBridge.totalMappedComponents} Figma component(s) linked`);
@@ -139,7 +160,7 @@ async function run() {
 
     if (command === 'check') {
       const baselinePath = args.baseline ? path.resolve(process.cwd(), args.baseline) : null;
-      const allGaps = collectGaps(project);
+      const allGaps: ReportedGap[] = collectGaps(project);
 
       if (args.updateBaseline && baselinePath) {
         writeBaseline(baselinePath, allGaps);
@@ -161,6 +182,7 @@ async function run() {
         unusedExports: result.waste.repoWaste.unusedExportDetails || [],
         orphanFiles: result.waste.allOrphanFiles,
         artifact: result.artifactPath,
+        healthScore: project.healthScore,
       });
 
       if (json) {
@@ -172,6 +194,9 @@ async function run() {
             (baselinePath ? `, ${s.baselinedGaps} baselined, ${s.newGaps} new` : '')
         );
         console.log(`🧹 Unused exports: ${s.unusedExports.dead} dead, ${s.unusedExports.localOnly} only used in their own file; ${s.orphanFiles} orphan file(s)`);
+        if (project.healthScore) {
+          console.log(`🎖️ Health Score: ${project.healthScore.overallScore}/100 [Grade: ${project.healthScore.grade}]`);
+        }
       }
 
       const failing = failingGaps(gaps, failOn);
@@ -187,6 +212,125 @@ async function run() {
         process.exit(1);
       } else if (!json) {
         console.log(`✅ BuildView Invariant Check Passed (fail-on: ${failOn}).`);
+      }
+    }
+
+    if (command === 'remediate') {
+      const allGaps = project.components.flatMap((c) => c.gaps.filter((g) => !g.resolved));
+      if (allGaps.length === 0) {
+        if (json || args.format === 'json') {
+          console.log(JSON.stringify({ status: 'clean', message: 'No unresolved architectural gaps found.', cards: [] }, null, 2));
+        } else {
+          console.log(`\n🎉 Architecture Clean: Zero unresolved architectural gaps found in ${project.name}!`);
+        }
+        return;
+      }
+
+      let targetGap = allGaps[0];
+      if (args.gapId) {
+        const found = allGaps.find((g) => g.id === args.gapId);
+        if (!found) {
+          console.error(`❌ Gap ID "${args.gapId}" not found. Available gaps: ${allGaps.map((g) => g.id).join(', ')}`);
+          process.exit(1);
+        }
+        targetGap = found;
+      } else {
+        const severityOrder: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+        allGaps.sort((a, b) => (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0));
+        targetGap = allGaps[0];
+      }
+
+      const budget = args.budget ? parseInt(args.budget, 10) : 450;
+      const card = AgentRemediationEngine.generateCard(targetGap, {
+        tokenBudget: budget,
+        verificationCmd: 'npx buildview check',
+      });
+
+      if (json || args.format === 'json') {
+        console.log(JSON.stringify(card, null, 2));
+      } else {
+        console.log(`\n======================================================`);
+        console.log(`🤖 AI AGENT SURGICAL REMEDIATION PROMPT CARD`);
+        console.log(`🎯 Target Gap: ${card.gapId} [${card.severity.toUpperCase()}]`);
+        console.log(`⚡ Token Budget: ~${card.tokenCostEstimate} tokens (Saved ~${card.tokenSavingsVsRawDump.toLocaleString()} tokens vs raw AST dump)`);
+        console.log(`======================================================\n`);
+        console.log(card.agentPromptText);
+        console.log(`\n======================================================`);
+        console.log(`👉 Copy and paste the prompt above directly into Claude Code, Gemini CLI, Cursor, or Codex.`);
+        console.log(`======================================================\n`);
+      }
+    }
+
+    if (command === 'ratchet') {
+      const designRes = DesignRulesEngine.analyzeDesignRules(resolvedTarget, project.components, { enforceTestIds: true });
+      const perfRes = PerformanceLinter.analyzePerformance(resolvedTarget, project.components);
+
+      const currentTotals: BuildViewRatchetTotals = {
+        colorLiterals: designRes.metrics.totalColorLiterals,
+        offScaleHeights: designRes.metrics.totalOffScaleHeights,
+        offScaleTypeSizes: designRes.metrics.totalOffScaleTypeSizes,
+        iconLiterals: designRes.metrics.totalIconLiterals,
+        arbitraryClasses: designRes.metrics.totalArbitraryClasses,
+        unmergedDynamicClasses: designRes.metrics.totalUnmergedDynamicClasses,
+        syncIoCalls: perfRes.metrics.syncFsInUiCount + perfRes.metrics.syncExecCount + perfRes.metrics.syncIpcCount,
+        missingTestIds: designRes.metrics.totalMissingTestIds,
+      };
+
+      const ratchetMode = (args.mode as any) || (args.updateBaseline ? 'update' : 'enforce');
+      const ratchetResult = RatchetManager.checkRatchet(resolvedTarget, currentTotals, {
+        mode: ratchetMode,
+        baselineFile: args.baseline,
+      });
+
+      if (json) {
+        console.log(JSON.stringify(ratchetResult, null, 2));
+      } else {
+        console.log(`\n======================================================`);
+        console.log(`📊 ARCHITECTURAL DEBT MONOTONIC RATCHET`);
+        console.log(`🎯 Mode: ${ratchetMode.toUpperCase()} | Baseline: ${path.basename(ratchetResult.baselinePath)}`);
+        console.log(`======================================================\n`);
+        console.log(ratchetResult.summary);
+        console.log('\nDebt Metrics Breakdown:');
+        for (const d of ratchetResult.deltas) {
+          const icon = d.status === 'regressed' ? '❌' : d.status === 'improved' ? '✨' : '🔹';
+          const sign = d.delta > 0 ? `+${d.delta}` : `${d.delta}`;
+          console.log(`  ${icon} ${d.category.padEnd(24)} current: ${d.current.toString().padStart(4)} | baseline: ${d.baseline.toString().padStart(4)} | delta: ${sign}`);
+        }
+        console.log(`\n======================================================\n`);
+      }
+
+      if (!ratchetResult.passed) {
+        process.exit(1);
+      }
+    }
+
+    if (command === 'reachability') {
+      const reach = result.reachability;
+      if (json) {
+        console.log(JSON.stringify(reach, null, 2));
+      } else {
+        console.log(`\n======================================================`);
+        console.log(`🔍 WHOLE-REPO REACHABILITY & LIVENESS AUDIT`);
+        console.log(`🎯 Root Entrypoints: ${reach.entrypoints.join(', ')}`);
+        console.log(`======================================================\n`);
+        console.log(`📦 Product Files: ${reach.metrics.totalProductFiles} total, ${reach.metrics.totalReachableFiles} reachable from entrypoints`);
+        console.log(`👻 Unmounted UI Components: ${reach.metrics.totalUnmountedComponents}`);
+        for (const u of reach.unmountedComponents.slice(0, 10)) {
+          console.log(`   - [UNMOUNTED] ${u.name} (${u.file}) - ${u.linesOfCode} lines, testids: [${u.testids.join(', ')}]`);
+        }
+        console.log(`\n🌉 Orphan Preload Bridge APIs: ${reach.metrics.totalOrphanPreloadMethods}`);
+        for (const o of reach.orphanPreloadMethods.slice(0, 10)) {
+          console.log(`   - [ORPHAN BRIDGE] window.electronAPI.${o.method} (0 renderer callers)`);
+        }
+        console.log(`\n🎯 Phantom E2E TestIDs: ${reach.metrics.totalPhantomTestIds}`);
+        for (const p of reach.phantomTestIds.slice(0, 10)) {
+          console.log(`   - [PHANTOM TESTID] "${p.testId}" queried in ${p.specFile}${p.definedInUnmountedFile ? ` (defined in unmounted ${p.definedInUnmountedFile})` : ''}`);
+        }
+        console.log(`\n======================================================\n`);
+      }
+
+      if (reach.gaps.some((g) => g.severity === 'high' || g.severity === 'critical')) {
+        process.exit(1);
       }
     }
   } catch (err: any) {

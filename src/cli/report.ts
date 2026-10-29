@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import type { BuildViewProject, GapItem, UnusedExportDetail } from '../shared/types.js';
+import type { BuildViewProject, GapItem, UnusedExportDetail, ArchitectureHealthScore } from '../shared/types.js';
 
 export type Severity = GapItem['severity'];
 export const SEVERITIES: readonly Severity[] = ['low', 'medium', 'high', 'critical'];
@@ -132,6 +132,7 @@ export interface CheckReport {
     unusedExports: { localOnly: number; dead: number };
     orphanFiles: number;
   };
+  healthScore?: ArchitectureHealthScore;
   gaps: ReportedGap[];
   waste: {
     unusedExports: UnusedExportDetail[];
@@ -148,6 +149,7 @@ export function buildCheckReport(input: {
   unusedExports: UnusedExportDetail[];
   orphanFiles: string[];
   artifact: string | null;
+  healthScore?: ArchitectureHealthScore;
 }): CheckReport {
   const failing = failingGaps(input.gaps, input.failOn);
   const bySeverity = { low: 0, medium: 0, high: 0, critical: 0 } as Record<Severity, number>;
@@ -177,6 +179,7 @@ export function buildCheckReport(input: {
       },
       orphanFiles: input.orphanFiles.length,
     },
+    healthScore: input.healthScore,
     gaps: input.gaps,
     waste: { unusedExports: input.unusedExports, orphanFiles: input.orphanFiles },
     artifact: input.artifact,

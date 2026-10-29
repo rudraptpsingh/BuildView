@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { parseJsonc } from './import-resolver.js';
 
 /** A layer declared by glob in buildview.config.json. */
 export interface BuildViewLayerConfig {
@@ -124,7 +125,7 @@ export function loadBuildViewConfig(rootDir: string, explicitPath?: string): Loa
 
   for (const file of candidates) {
     if (fs.existsSync(file)) {
-      const raw = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      const raw = parseJsonc(fs.readFileSync(file, 'utf-8'));
       return { config: validateConfig(raw), source: file };
     }
     if (explicitPath) throw new Error(`buildview config not found: ${file}`);

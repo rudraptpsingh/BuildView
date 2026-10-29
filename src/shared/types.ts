@@ -196,6 +196,7 @@ export interface BuildViewProject {
   activePlan?: ArchitecturePlan;
   activeStep?: number;
   totalSteps?: number;
+  healthScore?: ArchitectureHealthScore;
   lastUpdated: string;
 }
 
@@ -208,9 +209,100 @@ export interface TimelineEvent {
   description: string;
 }
 
-export interface GraphEdge {
-  id: string;
-  source: string; // caller component id
-  target: string; // callee component id
-  label?: string;
+export type HealthGrade = 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
+
+export interface ScoreDimension {
+  name: string;
+  score: number; // 0 - 100
+  weight: number; // e.g. 0.35
+  deductions: Array<{ reason: string; penalty: number; file?: string; line?: number }>;
+  summary: string;
 }
+
+export interface RemediationAction {
+  id: string;
+  priority: 1 | 2 | 3; // 1 = highest ROI
+  category: 'architecture' | 'cleanliness' | 'verification' | 'modularity';
+  title: string;
+  impactScorePoints: number;
+  description: string;
+  file?: string;
+  line?: number;
+}
+
+export interface ArchitectureHealthScore {
+  overallScore: number; // 0 - 100
+  grade: HealthGrade;
+  dimensions: {
+    architecture: ScoreDimension;
+    cleanliness: ScoreDimension;
+    verification: ScoreDimension;
+    modularity: ScoreDimension;
+  };
+  remediationPlan: RemediationAction[];
+  generatedAt: string;
+}
+
+export interface AgentBenchmarkEvaluation {
+  verdict: 'improved' | 'regressed' | 'neutral' | 'blocked';
+  scoreBefore: number;
+  scoreAfter: number;
+  scoreDelta: number;
+  gradeBefore: HealthGrade;
+  gradeAfter: HealthGrade;
+  regressionsIntroduced: Array<{
+    type: string;
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    message: string;
+    evidence?: string[];
+  }>;
+  improvementsAchieved: Array<{
+    type: string;
+    message: string;
+  }>;
+  tokenSavingsEstimate: {
+    rawFilesTokens: number;
+    componentContractTokens: number;
+    tokensSaved: number;
+    savingsPercent: number;
+  };
+  summary: string;
+}
+
+export interface PerformanceViolation {
+  file: string;
+  line: number;
+  severity: 'low' | 'medium' | 'high';
+  kind: 'sync_fs_in_ui' | 'sync_exec_in_ui' | 'sync_ipc' | 'sync_fs_in_main_startup';
+  operation: string;
+  message: string;
+  contextSnippet?: string;
+  remediation: string;
+}
+
+export interface PerformanceMetrics {
+  totalViolations: number;
+  syncFsInUiCount: number;
+  syncExecCount: number;
+  syncIpcCount: number;
+  filesWithViolations: string[];
+}
+
+export interface AgentRemediationCard {
+  gapId: string;
+  title: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  category: 'architecture' | 'cleanliness' | 'verification' | 'performance' | 'design_tokens';
+  targetFiles: string[];
+  diagnosis: string;
+  extractionPlan?: {
+    newFile?: string;
+    symbolsToMove?: string[];
+    importUpdates?: Array<{ file: string; addImport: string; removeImport?: string }>;
+  };
+  verificationCommand: string;
+  tokenCostEstimate: number;
+  tokenSavingsVsRawDump: number;
+  agentPromptText: string;
+}
+

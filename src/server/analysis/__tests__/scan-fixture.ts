@@ -7,7 +7,8 @@ export const FIXTURES_DIR = path.resolve(import.meta.dirname, '../../../../test-
 
 /** Scans a fixture repo under test-fixtures/ without writing an artifact. */
 export function scanFixture(name: string): Promise<DetailedScanResult> {
-  return RepoScannerService.scanRepositoryDetailed(new BuildViewStore(path.join(os.tmpdir(), 'buildview-test-store')), path.join(FIXTURES_DIR, name), {
+  const uniqueTmp = path.join(os.tmpdir(), `buildview-test-store-${Math.random().toString(36).slice(2)}`);
+  return RepoScannerService.scanRepositoryDetailed(new BuildViewStore(uniqueTmp), path.join(FIXTURES_DIR, name), {
     outputPath: false,
   });
 }
