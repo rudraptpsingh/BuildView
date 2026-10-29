@@ -19,6 +19,7 @@ import { AgentRemediationEngine } from '../server/analysis/agent-remediation.js'
 import { RatchetManager, type BuildViewRatchetTotals } from '../server/analysis/ratchet-manager.js';
 import { DesignRulesEngine } from '../server/analysis/design-rules.js';
 import { PerformanceLinter } from '../server/analysis/performance-lint.js';
+import { TestIntelligenceEngine } from '../server/analysis/test-intelligence.js';
 
 const USAGE = `
 BuildView CLI — Autonomous Architecture Mapping, Invariant & Change Planning Tool
@@ -32,6 +33,8 @@ Commands:
   check [dir]        Verify clean layer boundaries & circular dependency rules (CI/CD mode)
   ratchet [dir]      Enforce monotonic architectural debt reduction across tokens, classes, and I/O
   reachability [dir] Detect unmounted UI components, orphan preload bridge methods, and phantom testids
+  test-map [dir]     Compute minimal impact test set (L1-L6) and execution commands using reverse DAG
+  repair-specs [dir] Auto-heal dead spec locators with semantic live surface matches
   remediate [dir]    Generate token-budgeted surgical prompt cards for AI coding agents
   help               Display this help screen
 
@@ -323,15 +326,138 @@ async function run() {
           console.log(`   - [ORPHAN BRIDGE] window.electronAPI.${o.method} (0 renderer callers)`);
         }
         console.log(`\n🎯 Phantom E2E TestIDs: ${reach.metrics.totalPhantomTestIds}`);
-        for (const p of reach.phantomTestIds.slice(0, 10)) {
-          console.log(`   - [PHANTOM TESTID] "${p.testId}" queried in ${p.specFile}${p.definedInUnmountedFile ? ` (defined in unmounted ${p.definedInUnmountedFile})` : ''}`);
+        const unmountedPhantoms = reach.phantomTestIds.filter((p) => p.kind === 'unmounted');
+        if (unmountedPhantoms.length > 0) {
+          for (const p of unmountedPhantoms.slice(0, 10)) {
+            console.log(`   - [PHANTOM TESTID] "${p.testId}" queried in ${p.specFile}${p.definedInUnmountedFile ? ` (defined in unmounted ${p.definedInUnmountedFile})` : ''}`);
+          }
+        } else {
+          console.log(`   ✨ Zero E2E test queries target dead/unmounted components.`);
         }
         console.log(`\n======================================================\n`);
+      }
+
+      if (args.fixTestids) {
+        const repair = TestIntelligenceEngine.suggestSpecRepairs(resolvedTarget, result.parsedFiles, result.fileEdges, {
+          autoApply: args.apply,
+        });
+
+        if (json) {
+          console.log(JSON.stringify(repair, null, 2));
+        } else {
+          console.log(`\n======================================================`);
+          console.log(`🩹 BUILDVIEW E2E SPEC AUTO-REPAIR & HEALING`);
+          console.log(`🎯 Dead Selectors Found: ${repair.totalDeadSelectors} | Auto-Repaired: ${repair.repairedCount}`);
+          console.log(`======================================================\n`);
+          for (const sug of repair.suggestions) {
+            console.log(`• Dead Locator: "${sug.deadTestId}" in ${sug.specFile}`);
+            if (sug.suggestedLiveTestId) {
+              console.log(`  👉 Suggestion: replace with "${sug.suggestedLiveTestId}" (confidence: ${(sug.confidence * 100).toFixed(0)}%)`);
+              if (sug.patchDiff) {
+                console.log(`     Diff:\n${sug.patchDiff.split('\n').map((l) => '       ' + l).join('\n')}`);
+              }
+            } else {
+              console.log(`  ⚠️  ${sug.reason}`);
+            }
+            console.log('');
+          }
+          if (args.apply) {
+            console.log(`✅ Applied ${repair.repairedCount} spec locator repair(s) directly to disk.`);
+          } else if (repair.suggestions.some((s) => s.suggestedLiveTestId)) {
+            console.log(`💡 Run with --apply to automatically rewrite these spec locators in place.`);
+          }
+          console.log(`======================================================\n`);
+        }
       }
 
       if (reach.gaps.some((g) => g.severity === 'high' || g.severity === 'critical')) {
         process.exit(1);
       }
+    }
+
+    if (command === 'test-map') {
+      let targets: string[] = [];
+      if (args.extraPositionals && args.extraPositionals.length > 0) {
+        targets = args.extraPositionals;
+      } else {
+        // Try git diff in target repo
+        try {
+          const { execSync } = await import('child_process');
+          const gitOut = execSync('git diff --name-only HEAD~1', { cwd: resolvedTarget, encoding: 'utf-8' });
+          targets = gitOut.split('\n').map((s) => s.trim()).filter(Boolean);
+        } catch {
+          // fallback to entrypoints
+          targets = result.reachability.entrypoints.slice(0, 3);
+        }
+      }
+
+      if (targets.length === 0) {
+        targets = result.reachability.entrypoints.slice(0, 3);
+      }
+
+      const parsedFiles = result.parsedFiles;
+      const testMap = TestIntelligenceEngine.mapImpactedTests(resolvedTarget, targets, parsedFiles, result.fileEdges);
+
+      if (json) {
+        console.log(JSON.stringify(testMap, null, 2));
+      } else {
+        console.log(`\n======================================================`);
+        console.log(`🧭 BUILDVIEW REVERSE-DAG TEST IMPACT MAPPER`);
+        console.log(`🎯 Targets (${testMap.targetFiles.length}): ${testMap.targetFiles.join(', ')}`);
+        console.log(`======================================================\n`);
+        console.log(`📊 Impacted Tests by Architectural Lane:`);
+        for (const [lane, files] of Object.entries(testMap.byLane)) {
+          if (files.length > 0) {
+            console.log(`  🔹 [${lane.toUpperCase()}] (${files.length} test files):`);
+            for (const f of files.slice(0, 5)) {
+              console.log(`     - ${f}`);
+            }
+            if (files.length > 5) console.log(`     ... and ${files.length - 5} more`);
+          }
+        }
+        console.log(`\n⚡ Recommended Sub-Second Execution Plan:`);
+        for (const cmd of testMap.commands) {
+          console.log(`  ▶️  [${cmd.lane}] ${cmd.description}`);
+          console.log(`      $ ${cmd.command}\n`);
+        }
+        console.log(`======================================================\n`);
+      }
+      return;
+    }
+
+    if (command === 'repair-specs' || (command === 'reachability' && args.fixTestids)) {
+      const parsedFiles = result.parsedFiles;
+      const repair = TestIntelligenceEngine.suggestSpecRepairs(resolvedTarget, parsedFiles, result.fileEdges, {
+        autoApply: args.apply,
+      });
+
+      if (json) {
+        console.log(JSON.stringify(repair, null, 2));
+      } else {
+        console.log(`\n======================================================`);
+        console.log(`🩹 BUILDVIEW E2E SPEC AUTO-REPAIR & HEALING`);
+        console.log(`🎯 Dead Selectors Found: ${repair.totalDeadSelectors} | Auto-Repaired: ${repair.repairedCount}`);
+        console.log(`======================================================\n`);
+        for (const sug of repair.suggestions) {
+          console.log(`• Dead Locator: "${sug.deadTestId}" in ${sug.specFile}`);
+          if (sug.suggestedLiveTestId) {
+            console.log(`  👉 Suggestion: replace with "${sug.suggestedLiveTestId}" (confidence: ${(sug.confidence * 100).toFixed(0)}%)`);
+            if (sug.patchDiff) {
+              console.log(`     Diff:\n${sug.patchDiff.split('\n').map((l) => '       ' + l).join('\n')}`);
+            }
+          } else {
+            console.log(`  ⚠️  ${sug.reason}`);
+          }
+          console.log('');
+        }
+        if (args.apply) {
+          console.log(`✅ Applied ${repair.repairedCount} spec locator repair(s) directly to disk.`);
+        } else if (repair.suggestions.some((s) => s.suggestedLiveTestId)) {
+          console.log(`💡 Run with --apply to automatically rewrite these spec locators in place.`);
+        }
+        console.log(`======================================================\n`);
+      }
+      return;
     }
   } catch (err: any) {
     console.error(`❌ BuildView execution error:`, err.message);

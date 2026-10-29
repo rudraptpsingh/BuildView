@@ -58,11 +58,17 @@ const DEFAULT_ENTRY_CANDIDATES = [
   'client-web/src/App.tsx',
   'electron/main.ts',
   'electron/preload.ts',
+  'workers/src/index.ts',
+  'workers/index.ts',
+  'mobile/src/index.tsx',
+  'mobile/src/App.tsx',
+  'mobile/App.tsx',
 ];
 
-const TESTID_DEF_REGEX = /(?:data-testid|\btestId)\s*=\s*(?:"([^"]+)"|'([^']+)'|\{`([^`$]+)`\})/g;
-const CONDITIONAL_TESTID_REGEX = /(?:data-testid|\btestId)\s*=\s*\{[^{}\n]*\?\s*(?:'([^']+)'|"([^"]+)")\s*:\s*(?:'([^']+)'|"([^"]+)")\s*\}/g;
-const INTERPOLATED_PREFIX_REGEX = /(?:data-testid|\btestId)\s*=\s*\{`([^`]*?)\$\{/g;
+const TESTID_DEF_REGEX = /(?:data-testid|\b[a-zA-Z0-9_]*testId)\s*[:=]\s*(?:"([^"]+)"|'([^']+)'|\{`([^`$]+)`\})/gi;
+const TESTID_PREFIX_PROP_REGEX = /\b(?:testIdPrefix|prefixTestId)\s*[:=]\s*(?:"([^"]+)"|'([^']+)'|\{`([^`$]+)`\})/gi;
+const CONDITIONAL_TESTID_BLOCK_REGEX = /(?:data-testid|\b[a-zA-Z0-9_]*testId)\s*[:=]\s*\{([\s\S]*?)\}/g;
+const INTERPOLATED_PREFIX_REGEX = /(?:data-testid|\b[a-zA-Z0-9_]*testId)\s*[:=]\s*\{`([^`]*?)\$\{/gi;
 
 const SELECTOR_REGEXES = [
   /getByTestId\(\s*['"]([a-z0-9][a-z0-9-]*)['"]/g,
@@ -98,6 +104,19 @@ export class ReachabilityAnalyzer {
     for (const ec of entryCandidates) {
       const norm = normalizePath(ec);
       if (allFileMap.has(norm) || fs.existsSync(path.join(repoPath, ec))) {
+        entrypoints.push(norm);
+      }
+    }
+
+    // Auto-discover file-based routing entrypoints (Expo Router, Next.js app directory, Remix routes)
+    for (const [norm] of allFileMap.entries()) {
+      if (
+        (norm.includes('/app/') || norm.includes('/routes/')) &&
+        (norm.endsWith('.tsx') || norm.endsWith('.jsx') || norm.endsWith('.ts')) &&
+        !isTestPath(norm) &&
+        !isToolingPath(norm) &&
+        !entrypoints.includes(norm)
+      ) {
         entrypoints.push(norm);
       }
     }
@@ -143,17 +162,34 @@ export class ReachabilityAnalyzer {
         if (val) exact.add(val);
       }
 
-      const condRegex = new RegExp(CONDITIONAL_TESTID_REGEX);
-      while ((m = condRegex.exec(content)) !== null) {
-        const branch1 = m[1] || m[2];
-        const branch2 = m[3] || m[4];
-        if (branch1) exact.add(branch1);
-        if (branch2) exact.add(branch2);
+      const prefixPropRegex = new RegExp(TESTID_PREFIX_PROP_REGEX);
+      while ((m = prefixPropRegex.exec(content)) !== null) {
+        const val = m[1] || m[2] || m[3];
+        if (val) {
+          exact.add(val);
+          prefixes.push(val);
+          prefixes.push(`${val}-`);
+        }
+      }
+
+      const blockRegex = new RegExp(CONDITIONAL_TESTID_BLOCK_REGEX);
+      while ((m = blockRegex.exec(content)) !== null) {
+        const block = m[1];
+        if (block && (block.includes('?') || block.includes(':'))) {
+          const strRegex = /['"]([a-zA-Z0-9_-]+)['"]/g;
+          let sm: RegExpExecArray | null;
+          while ((sm = strRegex.exec(block)) !== null) {
+            if (sm[1]) exact.add(sm[1]);
+          }
+        }
       }
 
       const prefixRegex = new RegExp(INTERPOLATED_PREFIX_REGEX);
       while ((m = prefixRegex.exec(content)) !== null) {
-        if (m[1]) prefixes.push(m[1]);
+        if (m[1]) {
+          prefixes.push(m[1]);
+          if (!m[1].endsWith('-')) prefixes.push(`${m[1]}-`);
+        }
       }
 
       return { exact, prefixes };
@@ -258,11 +294,11 @@ export class ReachabilityAnalyzer {
     // 7. Dead & Phantom TestID Detection in E2E specs
     const isLive = (id: string) =>
       reachableExact.has(id) ||
-      reachablePrefixes.some((p) => id.startsWith(p) && id.length > p.length);
+      reachablePrefixes.some((p) => id === p || id.startsWith(p));
 
     const isEverywhere = (id: string) =>
       everywhereExact.has(id) ||
-      everywherePrefixes.some((p) => id.startsWith(p) && id.length > p.length);
+      everywherePrefixes.some((p) => id === p || id.startsWith(p));
 
     const phantomTestIds: PhantomTestIdItem[] = [];
     let unknownCount = 0;
@@ -287,11 +323,16 @@ export class ReachabilityAnalyzer {
         while ((qm = queryRegex.exec(testContent)) !== null) {
           const queried = qm[1];
 
-          // Check if deliberate negative assertion like .toHaveCount(0) or toBeNull()
+          // Check if deliberate negative assertion like .toHaveCount(0), toBeNull(), or defensive guard
           const lineEnd = testContent.indexOf('\n', qm.index);
           const lineStart = testContent.lastIndexOf('\n', qm.index);
           const line = testContent.slice(lineStart + 1, lineEnd < 0 ? undefined : lineEnd);
-          if (/\.toHaveCount\(0\)/.test(line) || /toBeNull\(/.test(line)) {
+          if (
+            /\.toHaveCount\(0\)/.test(line) ||
+            /toBeNull\(/.test(line) ||
+            /\.count\(\)\s*>\s*0/.test(line) ||
+            /not\.toBeInTheDocument/.test(line)
+          ) {
             continue;
           }
 

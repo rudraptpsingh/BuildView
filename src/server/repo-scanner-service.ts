@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { BuildViewStore } from './store.js';
 import { BuildViewProject, ArchitectureLayer } from '../shared/types.js';
-import { RepoParser } from './parser/repo-parser.js';
+import { RepoParser, ParsedFileResult } from './parser/repo-parser.js';
 import { WasteDetector, WasteAnalysisResult } from './parser/waste-detector.js';
 import { ArchitectureClusterer } from './parser/architecture-clusterer.js';
 import { ArchitectureRulesEngine, ArchitectureRuleAnalysisResult } from './parser/architecture-rules.js';
@@ -38,6 +38,7 @@ export interface DetailedScanResult {
   waste: WasteAnalysisResult;
   rules: ArchitectureRuleAnalysisResult;
   reachability: ReachabilityResult;
+  parsedFiles: ParsedFileResult[];
   fileEdges: FileEdge[];
   fileInfo: Map<string, FileClassification>;
   config: BuildViewConfig;
@@ -283,6 +284,7 @@ export class RepoScannerService {
       waste: wasteAnalysis,
       rules: ruleAnalysis,
       reachability: reachabilityAnalysis,
+      parsedFiles: allParsed,
       fileEdges,
       fileInfo,
       config,

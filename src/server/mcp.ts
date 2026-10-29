@@ -983,6 +983,119 @@ export function createBuildViewMcpServer(store: BuildViewStore) {
     }
   );
 
+  // Tool 15: Map Impacted Tests (L1-L6) via Reverse DAG
+  server.tool(
+    'buildview_test_map',
+    'Computes the minimum set of impact tests across architectural lanes (L1-L6) for modified files using reverse DAG reachability.',
+    {
+      repoPath: z.string().describe('Absolute path to the target repository directory'),
+      targetFiles: z.array(z.string()).optional().describe('List of modified or target files to map test impact for'),
+    },
+    async (args) => {
+      try {
+        const { TestIntelligenceEngine } = await import('./analysis/test-intelligence.js');
+        const detailed = await RepoScannerService.scanRepositoryDetailed(store, args.repoPath, { outputPath: false });
+        let targets = args.targetFiles || [];
+        if (targets.length === 0) {
+          try {
+            const { execSync } = await import('child_process');
+            const gitOut = execSync('git diff --name-only HEAD~1', { cwd: args.repoPath, encoding: 'utf-8' });
+            targets = gitOut.split('\n').map((s) => s.trim()).filter(Boolean);
+          } catch {
+            targets = detailed.reachability.entrypoints.slice(0, 3);
+          }
+        }
+        if (targets.length === 0) targets = detailed.reachability.entrypoints.slice(0, 3);
+
+        const result = TestIntelligenceEngine.mapImpactedTests(args.repoPath, targets, detailed.parsedFiles, detailed.fileEdges);
+
+        const lines: string[] = [
+          `# 🧭 BuildView Reverse-DAG Test Impact Mapper: ${detailed.project.name}`,
+          `**Targets (${result.targetFiles.length}):** ${result.targetFiles.join(', ')}`,
+          `**Total Impacted Tests:** ${result.impactedTests.length}`,
+          '',
+          '### 📊 Impacted Tests by Lane:',
+        ];
+
+        for (const [lane, files] of Object.entries(result.byLane)) {
+          if (files.length > 0) {
+            lines.push(`- **[${lane.toUpperCase()}]** (${files.length} test files):`);
+            for (const f of files.slice(0, 5)) {
+              lines.push(`  - \`${f}\``);
+            }
+            if (files.length > 5) lines.push(`  ... and ${files.length - 5} more`);
+          }
+        }
+
+        lines.push('');
+        lines.push('### ⚡ Recommended Sub-Second Execution Commands:');
+        for (const cmd of result.commands) {
+          lines.push(`- **[${cmd.lane}]** ${cmd.description}:`);
+          lines.push(`  \`$ ${cmd.command}\``);
+        }
+
+        return {
+          content: [{ type: 'text', text: lines.join('\n') }],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Failed to map test impact: ${err.message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 16: Auto-Heal & Repair Dead Spec Locators
+  server.tool(
+    'buildview_repair_specs',
+    'Detects unmounted or dead spec selectors and suggests or auto-applies semantic replacements from live surfaces.',
+    {
+      repoPath: z.string().describe('Absolute path to the target repository directory'),
+      autoApply: z.boolean().optional().describe('Whether to rewrite dead selectors in spec files on disk'),
+    },
+    async (args) => {
+      try {
+        const { TestIntelligenceEngine } = await import('./analysis/test-intelligence.js');
+        const detailed = await RepoScannerService.scanRepositoryDetailed(store, args.repoPath, { outputPath: false });
+        const repair = TestIntelligenceEngine.suggestSpecRepairs(args.repoPath, detailed.parsedFiles, detailed.fileEdges, {
+          autoApply: args.autoApply,
+        });
+
+        const lines: string[] = [
+          `# 🩹 BuildView E2E Spec Auto-Repair: ${detailed.project.name}`,
+          `**Dead Selectors Found:** ${repair.totalDeadSelectors}`,
+          `**Auto-Repaired:** ${repair.repairedCount}`,
+          '',
+          '### 🎯 Selector Suggestions:',
+        ];
+
+        for (const sug of repair.suggestions) {
+          lines.push(`- **\`${sug.deadTestId}\`** in \`${sug.specFile}\``);
+          if (sug.suggestedLiveTestId) {
+            lines.push(`  - 👉 Suggestion: replace with \`${sug.suggestedLiveTestId}\` (confidence: ${(sug.confidence * 100).toFixed(0)}%)`);
+            if (sug.patchDiff) {
+              lines.push('  ```diff');
+              lines.push(sug.patchDiff);
+              lines.push('  ```');
+            }
+          } else {
+            lines.push(`  - ⚠️ ${sug.reason}`);
+          }
+        }
+
+        return {
+          content: [{ type: 'text', text: lines.join('\n') }],
+        };
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text', text: `Failed to repair specs: ${err.message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
   return server;
 }
 

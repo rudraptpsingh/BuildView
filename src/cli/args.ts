@@ -1,5 +1,5 @@
 export interface CliArgs {
-  command: 'scan' | 'plan' | 'check' | 'remediate' | 'ratchet' | 'reachability';
+  command: 'scan' | 'plan' | 'check' | 'remediate' | 'ratchet' | 'reachability' | 'test-map' | 'repair-specs';
   target: string;
   json: boolean;
   out?: string;
@@ -14,6 +14,9 @@ export interface CliArgs {
   gapId?: string;
   format?: string;
   budget?: string;
+  fixTestids?: boolean;
+  apply?: boolean;
+  extraPositionals?: string[];
 }
 
 const VALUE_FLAGS = new Set([
@@ -52,17 +55,24 @@ export function parseCliArgs(argv: string[]): CliArgs | 'help' {
       args.noWrite = true;
     } else if (a === '--update-baseline') {
       args.updateBaseline = true;
+    } else if (a === '--fix-testids') {
+      args.fixTestids = true;
+    } else if (a === '--apply') {
+      args.apply = true;
     } else if (a.startsWith('-')) {
       throw new Error(`Unknown option ${a}`);
     } else {
       positionals.push(a);
     }
   }
-  const knownCommands = new Set(['scan', 'check', 'plan', 'remediate', 'ratchet', 'reachability']);
+  const knownCommands = new Set(['scan', 'check', 'plan', 'remediate', 'ratchet', 'reachability', 'test-map', 'repair-specs']);
   if (knownCommands.has(positionals[0])) {
     args.command = positionals.shift() as CliArgs['command'];
   }
   if (positionals[0]) args.target = positionals[0];
+  if (positionals.length > 1) {
+    args.extraPositionals = positionals.slice(1);
+  }
   if (args.updateBaseline && !args.baseline) throw new Error('--update-baseline needs --baseline <file>');
   return args;
 }
