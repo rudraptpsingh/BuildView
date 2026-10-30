@@ -77,7 +77,35 @@ const SELECTOR_REGEXES = [
 ];
 
 const PRELOAD_EXPOSE_REGEX = /(?:contextBridge\.exposeInMainWorld\s*\(\s*['"](?:electronAPI|electron)['"]\s*,\s*\{|\bwindow\.(?:electronAPI|electron)\s*=\s*\{)([\s\S]*?)\n\s*\}\s*\)/;
-const PRELOAD_METHOD_REGEX = /^\s*([a-zA-Z0-9_$]+)\s*:\s*(?:\([^)]*\)|async\s*\([^)]*\))\s*=>/gm;
+const PRELOAD_METHOD_REGEX = /^\s*(?:async\s+)?([a-zA-Z0-9_$]+)\s*(?:\([^)]*\)\s*\{|:\s*(?:\([^)]*\)|async\s*\([^)]*|function\s*\([^)]*\))\s*(?:=>|\{))/gm;
+const RESERVED_KEYWORDS = new Set([
+  'if',
+  'else',
+  'for',
+  'while',
+  'do',
+  'switch',
+  'case',
+  'break',
+  'continue',
+  'return',
+  'try',
+  'catch',
+  'finally',
+  'throw',
+  'const',
+  'let',
+  'var',
+  'function',
+  'class',
+  'import',
+  'export',
+  'default',
+  'new',
+  'typeof',
+  'void',
+  'delete',
+]);
 
 export class ReachabilityAnalyzer {
   /**
@@ -258,7 +286,10 @@ export class ReachabilityAnalyzer {
         const exposedMethods: string[] = [];
 
         while ((methMatch = methodRegex.exec(block)) !== null) {
-          exposedMethods.push(methMatch[1]);
+          const meth = methMatch[1];
+          if (!RESERVED_KEYWORDS.has(meth)) {
+            exposedMethods.push(meth);
+          }
         }
 
         // Read all reachable renderer files
@@ -276,8 +307,12 @@ export class ReachabilityAnalyzer {
         const fullRendererSource = reachableRendererContent.join('\n');
 
         for (const meth of exposedMethods) {
-          // Check if method is called anywhere in reachable renderer (supporting optional chaining and local api aliases)
-          const callRegex = new RegExp(`\\b(?:window\\.)?(?:electronAPI|electron|api)\\??\\.${meth}\\b|\\b${meth}\\s*:\\s*(?:window\\.)?(?:electronAPI|electron|api)\\b`);
+          // Check if method is called anywhere in reachable renderer (supporting direct calls, nested namespaces, destructuring, and bridge aliases)
+          const callRegex = new RegExp(
+            `\\b(?:window\\.)?(?:electronAPI|electron|api|bridge|electronBridge)(?:\\??\\.[a-zA-Z0-9_$]+)*\\??\\.${meth}\\b|` +
+            `\\{\\s*[^}]*\\b${meth}\\b[^}]*\\}\\s*=\\s*(?:window\\.)?(?:electronAPI|electron|api|bridge|electronBridge)(?:\\??\\.[a-zA-Z0-9_$]+)*|` +
+            `\\b${meth}\\s*:\\s*(?:window\\.)?(?:electronAPI|electron|api|bridge|electronBridge)\\b`
+          );
           if (!callRegex.test(fullRendererSource)) {
             orphanPreloadMethods.push({
               method: meth,

@@ -123,4 +123,52 @@ describe('TestIntelligenceEngine', () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it('generates targeted execution commands for L3 architectural contract tests and node scripts', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'buildview-l3-test-'));
+
+    const parsedFiles: ParsedFileResult[] = [
+      { filePath: 'src/core/schema.ts', classes: [], interfaces: [], functions: [], exports: [], rawContent: 'export const schema = 1;' },
+      { filePath: 'scripts/verify-contracts.cjs', classes: [], interfaces: [], functions: [], exports: [], rawContent: 'const { schema } = require("../src/core/schema");' },
+      { filePath: 'src/contracts/invariants.test.ts', classes: [], interfaces: [], functions: [], exports: [], rawContent: 'import { schema } from "../core/schema";' },
+    ];
+
+    const edges: FileEdge[] = [
+      {
+        from: 'scripts/verify-contracts.cjs',
+        to: 'src/core/schema.ts',
+        line: 1,
+        specifier: '../src/core/schema',
+        typeOnly: false,
+        kind: 'require',
+      },
+      {
+        from: 'src/contracts/invariants.test.ts',
+        to: 'src/core/schema.ts',
+        line: 1,
+        specifier: '../core/schema',
+        typeOnly: false,
+        kind: 'import',
+      },
+    ];
+
+    const result = TestIntelligenceEngine.mapImpactedTests(tmpDir, ['src/core/schema.ts'], parsedFiles, edges);
+
+    expect(result.byLane.L3_contract).toHaveLength(2);
+    expect(result.byLane.L3_contract).toContain('src/contracts/invariants.test.ts');
+    expect(result.byLane.L3_contract).toContain('scripts/verify-contracts.cjs');
+
+    const l3Commands = result.commands.filter((c) => c.lane === 'L3_contract');
+    expect(l3Commands).toHaveLength(2);
+
+    const vitestCmd = l3Commands.find((c) => c.command.startsWith('npx vitest run'));
+    expect(vitestCmd).toBeDefined();
+    expect(vitestCmd!.command).toContain('src/contracts/invariants.test.ts');
+
+    const nodeCmd = l3Commands.find((c) => c.command.startsWith('node'));
+    expect(nodeCmd).toBeDefined();
+    expect(nodeCmd!.command).toBe('node scripts/verify-contracts.cjs');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

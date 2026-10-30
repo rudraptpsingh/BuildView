@@ -153,7 +153,13 @@ export class TestIntelligenceEngine {
         if (!importers) continue;
 
         for (const imp of importers) {
-          if (isTestPath(imp)) {
+          const isL3ContractScript =
+            imp.includes('contract') ||
+            imp.includes('baseline') ||
+            imp.includes('liveness') ||
+            (imp.includes('script') && (imp.includes('test') || imp.includes('verify') || imp.includes('check')));
+
+          if (isTestPath(imp) || isL3ContractScript) {
             if (!seenTests.has(imp)) {
               seenTests.add(imp);
               impactedTests.push({
@@ -289,6 +295,32 @@ export class TestIntelligenceEngine {
         files: byLane.L2_component,
         estimatedDurationMs: byLane.L2_component.length * 200,
       });
+    }
+
+    // L3 Architecture & Invariant Contracts
+    if (byLane.L3_contract.length > 0) {
+      const nodeScripts = byLane.L3_contract.filter(
+        (f) => f.endsWith('.cjs') || (f.endsWith('.js') && !f.includes('.test.') && !f.includes('.spec.'))
+      );
+      const testFiles = byLane.L3_contract.filter((f) => !nodeScripts.includes(f));
+      if (testFiles.length > 0) {
+        commands.push({
+          lane: 'L3_contract',
+          description: 'Run architectural invariants & contract tests',
+          command: `npx vitest run ${testFiles.join(' ')}`,
+          files: testFiles,
+          estimatedDurationMs: testFiles.length * 150,
+        });
+      }
+      for (const script of nodeScripts) {
+        commands.push({
+          lane: 'L3_contract',
+          description: `Run architectural gate script (${path.basename(script)})`,
+          command: `node ${script}`,
+          files: [script],
+          estimatedDurationMs: 250,
+        });
+      }
     }
 
     // L4 Platform (e.g. Electron config)

@@ -145,4 +145,57 @@ describe('ReachabilityAnalyzer', () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it('correctly recognizes nested namespace, method shorthand, and destructured bridge calls', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'buildview-nested-reach-'));
+
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(srcDir, 'main.tsx'),
+      `
+      // Call via nested namespace with optional chaining
+      window.electronAPI?.systemAppearance?.onChanged((theme) => console.log(theme));
+
+      // Destructured call
+      const { queryStatus } = window.electronAPI;
+      queryStatus();
+
+      // Shorthand method call
+      window.electronAPI.getVersion();
+      `
+    );
+
+    const electronDir = path.join(tmpDir, 'electron');
+    fs.mkdirSync(electronDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(electronDir, 'preload.ts'),
+      `
+      contextBridge.exposeInMainWorld('electronAPI', {
+        systemAppearance: {
+          onChanged: (cb: any) => ipcRenderer.on('appearance', cb),
+        },
+        queryStatus: () => ipcRenderer.invoke('status:query'),
+        async getVersion() {
+          return ipcRenderer.invoke('app:version');
+        },
+        trueOrphanMethod: () => ipcRenderer.invoke('orphan:call'),
+      });
+      `
+    );
+
+    const parsedFiles: ParsedFileResult[] = [
+      { filePath: 'src/main.tsx', classes: [], interfaces: [], functions: [], exports: [], rawContent: '' },
+      { filePath: 'electron/preload.ts', classes: [], interfaces: [], functions: [], exports: [], rawContent: '' },
+    ];
+
+    const result = ReachabilityAnalyzer.analyzeReachability(tmpDir, parsedFiles, [], ['src/main.tsx']);
+
+    // Only 'trueOrphanMethod' should be flagged as orphan!
+    // 'onChanged', 'queryStatus', and 'getVersion' must all be recognized as reachable.
+    expect(result.metrics.totalOrphanPreloadMethods).toBe(1);
+    expect(result.orphanPreloadMethods[0].method).toBe('trueOrphanMethod');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

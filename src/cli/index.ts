@@ -39,6 +39,7 @@ Commands:
   help               Display this help screen
 
 Options:
+  --json                   Print machine-readable JSON report on stdout
   --out <file>             Write the architecture artifact here (default: <dir>/buildview-architecture.json)
   --no-write               Do not write the architecture artifact
   --config <file>          Config file to use instead of buildview.config.json / package.json#buildview
@@ -135,8 +136,53 @@ async function run() {
     log(`👉 View live dashboard: http://localhost:${port}`);
     log('======================================================\n');
 
+    if (command === 'scan' && json) {
+      console.log(
+        JSON.stringify(
+          {
+            tool: 'buildview',
+            command: 'scan',
+            target: resolvedTarget,
+            projectName: project.name,
+            configSource: result.configSource,
+            elapsedSeconds: parseFloat(elapsed),
+            summary: {
+              layers: project.layers.length,
+              components: project.components.length,
+              files: totalFiles,
+              linesOfCode: totalLines,
+              tests: totalTests,
+              gaps: unresolvedGaps.length,
+              healthScore: project.healthScore?.overallScore ?? null,
+              grade: project.healthScore?.grade ?? null,
+            },
+            artifactPath: result.artifactPath ?? null,
+          },
+          null,
+          2
+        )
+      );
+      return;
+    }
+
     if (command === 'plan') {
       const plan = store.createArchitecturePlan();
+      if (json) {
+        console.log(
+          JSON.stringify(
+            {
+              tool: 'buildview',
+              command: 'plan',
+              target: resolvedTarget,
+              projectName: project.name,
+              plan,
+            },
+            null,
+            2
+          )
+        );
+        return;
+      }
       log(`\n======================================================`);
       log(`🗺️  ARCHITECTURE CHANGE & MIGRATION PLAN`);
       log(`📋 Plan: ${plan.title}`);

@@ -110,3 +110,38 @@ describe('check --json (end to end)', () => {
     expect(report.summary.newGaps).toBe(0);
   }, 20000);
 });
+
+describe('scan and plan --json (end to end)', () => {
+  const tsxCli = path.resolve(import.meta.dirname, '../../node_modules/tsx/dist/cli.mjs');
+  const cli = path.resolve(import.meta.dirname, 'index.ts');
+  const fixture = path.resolve(import.meta.dirname, '../../test-fixtures/cycles');
+
+  it('prints valid structured JSON for scan --json without writing artifacts when --no-write is set', () => {
+    const res = spawnSync(process.execPath, [tsxCli, cli, 'scan', fixture, '--json', '--no-write'], {
+      encoding: 'utf-8',
+      env: { ...process.env, BUILDVIEW_PORT: '' },
+    });
+    expect(res.status).toBe(0);
+    const data = JSON.parse(res.stdout);
+    expect(data.tool).toBe('buildview');
+    expect(data.command).toBe('scan');
+    expect(data.artifactPath).toBeNull();
+    expect(data.summary).toBeDefined();
+    expect(data.summary.components).toBeGreaterThan(0);
+    expect(data.summary.files).toBeGreaterThan(0);
+  }, 20000);
+
+  it('prints valid structured JSON for plan --json', () => {
+    const res = spawnSync(process.execPath, [tsxCli, cli, 'plan', fixture, '--json', '--no-write'], {
+      encoding: 'utf-8',
+      env: { ...process.env, BUILDVIEW_PORT: '' },
+    });
+    expect(res.status).toBe(0);
+    const data = JSON.parse(res.stdout);
+    expect(data.tool).toBe('buildview');
+    expect(data.command).toBe('plan');
+    expect(data.plan).toBeDefined();
+    expect(Array.isArray(data.plan.steps)).toBe(true);
+  }, 20000);
+});
+
