@@ -65,10 +65,12 @@ const result = TokenEngine.validateCompliance(component);
 
 ## MCP Tools Reference
 
-BuildView registers 7 tools for AI coding agents:
+BuildView exposes planning/tracking and code-analysis tools for AI coding agents. Start delivery planning with its planning contract:
 
 | MCP Tool | Description |
 |---|---|
+| `buildview_get_planning_contract` | Get the schema, concrete-plan template, evidence requirements and agent workflow |
+| `buildview_plan_project` | Validate an in-repo JSON roadmap and automatically map dependencies into parallel phases; report missing planning details |
 | `buildview_init_project` | Initialize or reset an architectural project with ordered build layers |
 | `buildview_define_component` | Register a component with API anatomy, callers, callees, and priority |
 | `buildview_update_progress` | Update build progress %, lifecycle status, and touched files in real time |
@@ -260,9 +262,31 @@ npm run dev
 - **Web Dashboard (dev)**: `http://localhost:5173` (Vite, proxies `/api` to the server)
 - **Built dashboard, Real-Time API & SSE Stream**: `http://localhost:3333` (`/api/events`); set `BUILDVIEW_PORT` to change it
 
+### Shared dashboard + MCP (recommended for live delivery tracking)
+
+After building, start **one** process from the target project directory, or set an explicit state directory:
+
+```bash
+BUILDVIEW_STORAGE_DIR=/absolute/project/.buildview BUILDVIEW_PORT=3333 node /path/to/BuildView/bin/buildview.js serve
+```
+
+The dashboard is at `http://127.0.0.1:3333`; connect a Streamable HTTP MCP client to `http://127.0.0.1:3333/mcp`. All clients and dashboard share one store, so MCP mutations reach the dashboard immediately and the project survives restart. This is a loopback-only development service with Host/Origin checks, not a public or enterprise server. Keep live `.buildview/` state out of version control and export deliberate reference snapshots separately. Timeline events and progress notes are currently in-memory; retain durable test/receipt artifacts outside the event feed.
+
+An agent should call `buildview_get_planning_contract`, read requirements, write one `buildview.plan.json`, then call `buildview_plan_project`. Each track/gate needs a goal, method, outcome, acceptance tests with expected evidence, input/output/failure integration contracts, reuse boundaries, completion evidence and prerequisite IDs. Legacy `build`/`validate` plans still load but missing concrete fields appear as planning gaps. The planner checks cycles and missing IDs before mutation and starts every component at **planned / 0%**. It does not infer requirements from prose or execute acceptance tests.
+
+Plans may supply explicit architectural `layers` and an item `layerId`; `depends_on` remains the independent execution DAG. Layer order groups the map and breaks priority ties, rather than forcing every lower layer to finish first. Items support `priority` (1–5, default 1), `module`, and structured `inputs`/`outputs` with `name`, `schemaRef`, `description` and optional `required`. The component drawer shows goal/method/outcome, data ports, planned acceptance checks, failure contracts and reuse boundaries separately. Schema references are preserved/displayed, not automatically dereferenced or validated; planned checks are not executed source-test results.
+
+Before implementation, inspect `buildview_get_roadmap` and its `planningReadiness`: independent ready components may run in parallel; unmet prerequisites or open gaps block readiness. MCP completion updates require completed prerequisites, no open gaps and a nonempty evidence-reference note. These are guardrails against obvious progress abuse, not verified test results or multi-agent task locks. Existing code scans and file-based progress are inventory signals, not proof that a future delivery plan is complete. Keep scans separate from the active planned graph because scanning replaces it.
+
+### Automatic repository observation
+
+Set `BUILDVIEW_REPO_PATH=/absolute/project` when starting `buildview serve` (or pass `repoPath` to `startSharedHost`). The host debounces filesystem events and reconciles every five seconds, persists observed create/modify/delete deltas, and publishes them through the same dashboard SSE feed. Restart compares the persisted snapshot, so edits made while stopped are observed too. `.git`, `.buildview`, dependencies/build caches and symlinks are ignored.
+
+Add optional repo-relative `fileGlobs: ["modules/ingest/**"]` to each roadmap track/gate for ownership. Exact declared component file paths also match, but a shared plan reference is not implicit code ownership. Unmapped changes remain visible in activity and `workingTreeChanges`; no architecture scan or graph replacement is triggered. A file change never awards progress or passing tests. Changes owned by a completed component create a `validation_stale` gap; previous numeric progress is retained as history, not fresh release proof. Plan-file edits create plan drift requiring an explicit reviewed refresh; automatic plan reload is intentionally deferred. This is an observation feed (mtime/size), not a git diff, a correctness check or a multi-host synchronisation mechanism.
+
 ### Connecting to Claude Desktop / Cursor MCP
 
-Add to your `claude_desktop_config.json`:
+For an independent stdio session, add to your `claude_desktop_config.json` (each process has its own in-memory store; use the shared HTTP host above for live dashboard/multi-agent use):
 
 ```json
 {

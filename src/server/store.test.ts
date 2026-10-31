@@ -151,7 +151,7 @@ describe('BuildViewStore TDD Suite', () => {
     expect(comp?.status).toBe('in_progress');
   });
 
-  it('should calculate roadmap correctly, directing agent to lowest unfinished layer and highest priority component', () => {
+  it('selects a dependency-ready component by priority without treating earlier architecture layers as barriers', () => {
     store.initProject('Multi-layer System', 'TDD Roadmap Test', [
       { id: 'layer_0', name: 'Foundation', order: 0, description: 'L0' },
       { id: 'layer_1', name: 'Core Engine', order: 1, description: 'L1' },
@@ -204,10 +204,11 @@ describe('BuildViewStore TDD Suite', () => {
 
     const roadmap = store.getRoadmap();
 
-    // Agent MUST be directed to c2 first, because Layer 0 has unfinished work before moving to Layer 1!
+    // Both components are independent. P1 work can proceed while an earlier layer remains unfinished.
     expect(roadmap.nextFocus).not.toBeNull();
-    expect(roadmap.nextFocus?.componentId).toBe('c2');
-    expect(roadmap.nextFocus?.layerName).toBe('Foundation');
-    expect(roadmap.nextFocus?.priority).toBe(2);
+    expect(roadmap.nextFocus?.componentId).toBe('c3');
+    expect(roadmap.nextFocus?.layerName).toBe('Core Engine');
+    expect(roadmap.nextFocus?.priority).toBe(1);
+    expect(roadmap.readyComponentIds).toEqual(['c3','c2']);
   });
 });

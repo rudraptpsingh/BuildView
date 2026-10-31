@@ -10,6 +10,7 @@ import {
   TimelineEvent,
   ComponentStatus,
   ArchitecturePlan,
+  RepositoryFileDelta,
 } from '../shared/types.js';
 import { ArchitecturePlanner } from './parser/architecture-planner.js';
 
@@ -25,6 +26,12 @@ export class BuildViewStore extends EventEmitter {
     }
     this.stateFilePath = path.join(storageDir, 'state.json');
     this.project = this.loadOrInit();
+    // Reconstruct observed-file activity from durable delta state after restart.
+    this.timeline = (this.project.workingTreeChanges || []).slice(-100).reverse().map(change=>({
+      id:`observed_${change.observedAt}_${change.path}`,timestamp:change.observedAt,type:'file_changed' as const,
+      componentId:change.componentIds[0],title:`${change.status}: ${change.path}`,
+      description:change.componentIds.length ? `Restored observed delta for ${change.componentIds.join(', ')}; validation is not inferred.` : 'Restored unmapped repository change.',
+    }));
   }
 
   private loadOrInit(): BuildViewProject {
@@ -250,18 +257,19 @@ export class BuildViewStore extends EventEmitter {
       };
     });
 
-    // Find next component to build: lowest layer with unfinished components, ordered by priority
-    let nextComponent: ArchitectureComponent | null = null;
-    let nextLayer: ArchitectureLayer | null = null;
-
-    for (const group of layerMap) {
-      const incomplete = group.components.find((c) => c.progress < 100 || c.gaps.some((g) => !g.resolved));
-      if (incomplete) {
-        nextComponent = incomplete;
-        nextLayer = group.layer;
-        break;
-      }
-    }
+    // Architectural layer order is a display/tie-break hint, not a global build barrier.
+    const layerOrder=new Map(sortedLayers.map(layer=>[layer.id,layer.order]));
+    const byId=new Map(this.project.components.map(component=>[component.id,component]));
+    const candidates=this.project.components.filter(c=>c.status!=='completed'||c.gaps.some(g=>!g.resolved)||c.progress<100)
+      .sort((a,b)=>a.priority-b.priority||(layerOrder.get(a.layerId)||0)-(layerOrder.get(b.layerId)||0)||a.id.localeCompare(b.id));
+    const dependencyReady=candidates.filter(component=>component.anatomy.callees.filter(id=>byId.has(id)).every(id=>{
+      const prerequisite=byId.get(id);
+      return prerequisite?.status==='completed'&&!prerequisite.gaps.some(g=>!g.resolved);
+    }));
+    const readyComponents=dependencyReady.filter(c=>!c.gaps.some(g=>!g.resolved));
+    // When no implementation is ready, surface dependency-ready planning/gap work.
+    const nextComponent=readyComponents[0] || dependencyReady[0] || null;
+    const nextLayer=nextComponent ? sortedLayers.find(layer=>layer.id===nextComponent.layerId) : null;
 
     const allGaps = this.project.components.flatMap((c) =>
       c.gaps
@@ -275,6 +283,7 @@ export class BuildViewStore extends EventEmitter {
 
     return {
       projectName: this.project.name,
+      readyComponentIds: readyComponents.map(component=>component.id),
       layerMap,
       nextFocus: nextComponent
         ? {
@@ -317,6 +326,47 @@ export class BuildViewStore extends EventEmitter {
     });
     this.save();
     return this.project;
+  }
+
+  public recordRepositoryWatchError(root:string,error:string) {
+    if(this.project.repositoryWatch?.root===root&&this.project.repositoryWatch.error===error)return;
+    this.project.repositoryWatch={root,snapshot:this.project.repositoryWatch?.snapshot||{},lastScanAt:new Date().toISOString(),...this.project.repositoryWatch,error};
+    this.addTimelineEvent({type:'file_changed',title:'Repository observation warning',description:error});
+    this.save();
+  }
+
+  public recordRepositoryObservation(root:string,snapshot:Record<string,string>,changes:RepositoryFileDelta[]) {
+    const prior=this.project.repositoryWatch;
+    const planSources=new Set(this.project.components.map(c=>c.planSource).filter(Boolean));
+    const drift=changes.some(change=>planSources.has(change.path));
+    this.project.repositoryWatch={root,snapshot,lastScanAt:new Date().toISOString(),planDrift:prior?.planDrift||drift};
+    const byPath=new Map((this.project.workingTreeChanges||[]).map(change=>[change.path,change]));
+    for(const change of changes) {
+      byPath.set(change.path,change);
+      this.addTimelineEvent({type:'file_changed',title:`${change.status}: ${change.path}`,
+        componentId:change.componentIds[0],description:change.componentIds.length ? `Observed file delta for ${change.componentIds.join(', ')}. Validation is not inferred.` : 'Observed unmapped repository change. Assign ownership if relevant.'});
+      for(const id of change.componentIds) {
+        const component=this.project.components.find(c=>c.id===id);
+        if(!component)continue;
+        const file=component.files.find(f=>f.path===change.path);
+        if(file)file.status=change.status;
+        else component.files.push({path:change.path,status:change.status,description:'Automatically observed file delta; not test evidence'});
+        if(component.status==='completed') {
+          component.status='gap_detected';
+          if(!component.gaps.some(g=>!g.resolved&&g.kind==='validation_stale'))component.gaps.push({id:`stale_${id}_${Date.now()}`,kind:'validation_stale',title:'Validation stale after file change',description:`${change.path} changed after completion. Rerun acceptance checks and record new evidence.`,severity:'high',resolved:false});
+        }
+        component.updatedAt=change.observedAt;
+      }
+    }
+    if(drift) {
+      const owner=this.project.components.find(c=>changes.some(change=>change.componentIds.includes(c.id)&&planSources.has(change.path)))||this.project.components[0];
+      if(owner&&!owner.gaps.some(g=>!g.resolved&&g.kind==='plan_drift'))owner.gaps.push({id:`plan_drift_${Date.now()}`,kind:'plan_drift',title:'Plan source changed — explicit refresh required',description:'The plan source changed on disk. Review changes and explicitly refresh the plan; the watcher never replaces the graph.',severity:'high',resolved:false});
+      this.addTimelineEvent({type:'file_changed',title:'Plan source changed',description:'Review and refresh the plan explicitly. Architecture was not replaced.'});
+    }
+    this.project.workingTreeChanges=[...byPath.values()].sort((a,b)=>a.observedAt.localeCompare(b.observedAt)).slice(-500);
+    if(changes.length)this.project.lastUpdated=new Date().toISOString();
+    // Initial baseline is durable. No-op reconciliations do not create event/save loops.
+    if(changes.length||!prior||JSON.stringify(prior.snapshot)!==JSON.stringify(snapshot)||prior.error)this.save();
   }
 
   public createArchitecturePlan(title?: string, summary?: string): ArchitecturePlan {

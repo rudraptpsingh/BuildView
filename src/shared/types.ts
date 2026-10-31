@@ -129,6 +129,25 @@ export interface FigmaMappingInfo {
  */
 export type LayerSource = 'config' | 'keyword' | 'shared' | 'runtime' | 'tooling' | 'default';
 
+export interface PlanningDataPort {
+  name: string;
+  schemaRef: string;
+  description: string;
+  required?: boolean;
+}
+
+export interface ComponentPlanning {
+  goal?: string;
+  method?: string;
+  outcome?: string;
+  inputs?: PlanningDataPort[];
+  outputs?: PlanningDataPort[];
+  acceptanceTests?: Array<{id:string;description:string;evidence:string}>;
+  integrationContracts?: Array<{boundary:string;input:string;output:string;failureBehavior:string;validation:string}>;
+  reuseBoundaries?: Array<{tool:string;responsibility:string;ownedWork:string}>;
+  evidenceRequired?: string[];
+}
+
 export interface ArchitectureComponent {
   id: string;
   name: string;
@@ -149,6 +168,12 @@ export interface ArchitectureComponent {
   figmaComponents?: FigmaMappingInfo[];
   gaps: GapItem[];
   updatedAt: string;
+  /** Optional planned implementation ownership globs (repo-relative). */
+  fileGlobs?: string[];
+  /** Plan reference, excluded from implicit code ownership. */
+  planSource?: string;
+  module?: string;
+  planning?: ComponentPlanning;
 }
 
 export interface ArchitectureLayer {
@@ -182,6 +207,13 @@ export interface ArchitecturePlan {
   affectedComponentIds: string[]; // Blast radius component IDs
 }
 
+export interface RepositoryFileDelta {
+  path: string;
+  status: 'created' | 'modified' | 'deleted';
+  observedAt: string;
+  componentIds: string[];
+}
+
 export interface BuildViewProject {
   id: string;
   name: string;
@@ -197,6 +229,15 @@ export interface BuildViewProject {
   activeStep?: number;
   totalSteps?: number;
   healthScore?: ArchitectureHealthScore;
+  repositoryWatch?: {
+    root: string;
+    snapshot: Record<string,string>;
+    lastScanAt: string;
+    error?: string;
+    planDrift?: boolean;
+  };
+  /** Latest observed delta per path, capped to 500 records; not a git diff. */
+  workingTreeChanges?: RepositoryFileDelta[];
   lastUpdated: string;
 }
 

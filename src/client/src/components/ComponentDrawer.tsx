@@ -22,6 +22,7 @@ import { SeverityBadge } from './ui/SeverityBadge.js';
 import { ProgressBar } from './ui/ProgressBar.js';
 import { TestBadge } from './ui/TestBadge.js';
 import { WasteBadge } from './ui/WasteBadge.js';
+import { PlanningDetails } from './PlanningDetails.js';
 
 interface ComponentDrawerProps {
   component: ArchitectureComponent | null;
@@ -97,6 +98,7 @@ export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({
               <h2 className="text-base font-bold text-[var(--text-primary)] font-mono">
                 {component.name}
               </h2>
+              {component.module && <code className="text-[11px] text-[var(--text-tertiary)] break-all">{component.module}</code>}
               <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
                 {component.description}
               </p>
@@ -119,7 +121,7 @@ export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({
                 className={`segmented-tab ${activeTab === 'anatomy' ? 'active' : ''}`}
               >
                 <Code2 className="w-3.5 h-3.5" />
-                <span>API CONTRACT ({component.anatomy.functions?.length || 0})</span>
+                <span>{component.planning ? 'PLAN & DATA' : `API CONTRACT (${component.anatomy.functions?.length || 0})`}</span>
               </button>
 
               <button
@@ -127,7 +129,7 @@ export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({
                 className={`segmented-tab ${activeTab === 'graph' ? 'active' : ''}`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>CALL GRAPH</span>
+                <span>{component.planning ? 'DEPENDENCIES' : 'CALL GRAPH'}</span>
               </button>
 
               <button
@@ -143,7 +145,7 @@ export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({
                 className={`segmented-tab ${activeTab === 'tests' ? 'active' : ''}`}
               >
                 <TestTube className="w-3.5 h-3.5" />
-                <span>TESTS ({component.testSummary?.totalTests || 0})</span>
+                <span>SOURCE TESTS ({component.testSummary?.totalTests || 0})</span>
               </button>
 
               <button
@@ -170,6 +172,7 @@ export const ComponentDrawer: React.FC<ComponentDrawerProps> = ({
           {/* TAB 1: API & ANATOMY STRUCTURE */}
           {activeTab === 'anatomy' && (
             <div className="space-y-5">
+              {component.planning && <PlanningDetails planning={component.planning}/>}
               {/* Functions & Methods Spec */}
               <div>
                 <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--text-tertiary)] mb-2 flex items-center justify-between">

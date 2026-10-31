@@ -1,0 +1,53 @@
+import {it,expect} from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {BuildViewStore} from './store.js';
+import {startRepositoryWatcher,isIgnoredWatchPath} from './repo-watcher.js';
+it('persists mapped/unmapped deltas, ignores generated/symlink files, marks completed evidence stale and catches offline changes after restart',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'buildview-watch-'));
+ const outside=fs.mkdtempSync(path.join(os.tmpdir(),'buildview-outside-'));
+ let watcher:ReturnType<typeof startRepositoryWatcher>|undefined;
+ try {
+ const dir=path.join(root,'.buildview');const store=new BuildViewStore(dir);
+ store.initProject('Watch fixture','Test');
+ store.defineComponent({id:'owned',name:'Owned',layerId:'layer_foundation',description:'Test',color:'cyan',priority:1,status:'planned',progress:0,anatomy:{members:[],functions:[],state:[],callers:[],callees:[]},files:[],gaps:[],fileGlobs:['modules/owned/**'],planSource:'buildview.plan.json'});
+ fs.writeFileSync(path.join(root,'buildview.plan.json'),'{}');
+ watcher=startRepositoryWatcher(store,root,10);
+ let events=0;store.on('update',()=>events++);
+ fs.mkdirSync(path.join(root,'modules/owned'),{recursive:true});
+ fs.writeFileSync(path.join(root,'modules/owned/a.ts'),'initial');
+ fs.writeFileSync(path.join(root,'unmapped.md'),'unmapped');
+ fs.mkdirSync(path.join(root,'node_modules'),{recursive:true});
+ fs.writeFileSync(path.join(root,'node_modules/ignored.ts'),'ignored');
+ fs.writeFileSync(path.join(outside,'external.ts'),'outside');
+ fs.symlinkSync(outside,path.join(root,'linked'),'dir');
+ watcher.flush();
+ const project=store.getProject();
+ expect(project.workingTreeChanges?.map(c=>c.path).sort()).toEqual(['modules/owned/a.ts','unmapped.md']);
+ expect(project.workingTreeChanges?.find(c=>c.path==='modules/owned/a.ts')?.componentIds).toEqual(['owned']);
+ expect(project.workingTreeChanges?.find(c=>c.path==='unmapped.md')?.componentIds).toEqual([]);
+ expect(project.components[0]).toMatchObject({status:'planned',progress:0});expect(events).toBe(1);
+ expect(store.getTimeline().some(e=>e.description.includes('unmapped'))).toBe(true);
+ store.updateComponentProgress({id:'owned',status:'completed',progress:100,note:'Fixture claim only'});
+ fs.writeFileSync(path.join(root,'modules/owned/a.ts'),'changed after completion');watcher.flush();
+ expect(project.components[0].status).toBe('gap_detected');
+ expect(project.components[0].gaps.some(g=>g.kind==='validation_stale'&&!g.resolved)).toBe(true);
+ expect(project.components[0].progress).toBe(100); // Historical progress is not fabricated downward.
+ fs.unlinkSync(path.join(root,'modules/owned/a.ts'));watcher.flush();
+ expect(project.workingTreeChanges?.find(c=>c.path==='modules/owned/a.ts')?.status).toBe('deleted');
+ watcher.close();watcher=undefined;
+ fs.writeFileSync(path.join(root,'offline.txt'),'created while host stopped');
+ const restored=new BuildViewStore(dir);
+ expect(restored.getTimeline().some(e=>e.title==='created: unmapped.md')).toBe(true);
+ watcher=startRepositoryWatcher(restored,root,10);
+ expect(restored.getProject().workingTreeChanges?.find(c=>c.path==='offline.txt')?.status).toBe('created');
+ expect(restored.getProject().components[0].gaps.some(g=>g.kind==='validation_stale')).toBe(true);
+ const id=restored.getProject().id;
+ fs.writeFileSync(path.join(root,'buildview.plan.json'),'{"changed":true}');watcher.flush();
+ expect(restored.getProject().repositoryWatch?.planDrift).toBe(true);
+ expect(restored.getProject().components[0].gaps.some(g=>g.kind==='plan_drift')).toBe(true);
+ expect(restored.getProject().id).toBe(id);expect(restored.getProject().components).toHaveLength(1);
+ expect(isIgnoredWatchPath('x/.git/HEAD')).toBe(true);
+ }finally {watcher?.close();fs.rmSync(root,{recursive:true,force:true});fs.rmSync(outside,{recursive:true,force:true});}
+});

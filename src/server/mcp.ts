@@ -2,12 +2,35 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { BuildViewStore } from './store.js';
 import { RepoScannerService } from './repo-scanner-service.js';
+import { planProject } from './project-planner.js';
+import { getPlanningContract, getPlanningReadiness, planningInstructions } from './planning-contract.js';
 
 export function createBuildViewMcpServer(store: BuildViewStore) {
   const server = new McpServer({
     name: 'BuildView',
     version: '1.0.0',
-  });
+  }, { instructions: planningInstructions });
+
+  server.tool(
+    'buildview_get_planning_contract',
+    'Start here before delivery planning: get the supported JSON schema, concrete-plan template, evidence requirements and agent workflow. The agent supplies requirements; BuildView checks and maps the plan.',
+    {},
+    async () => ({content:[{type:'text',text:JSON.stringify(getPlanningContract(),null,2)}]})
+  );
+
+  server.tool(
+    'buildview_plan_project',
+    'Automatically map a version-1 JSON roadmap into dependency phases and planned components. Call buildview_get_planning_contract first. Missing concrete acceptance/contracts/evidence fields become explicit planning gaps; cycles and unknown prerequisites fail before replacement. Does not infer prose requirements or prove completion.',
+    { repoPath:z.string(), planPath:z.string().default('buildview.plan.json'), replaceExisting:z.boolean().default(false) },
+    async args => {
+      try {
+        const project=planProject(store,args.repoPath,args.planPath,args.replaceExisting);
+        return {content:[{type:'text',text:JSON.stringify({projectName:project.name,components:project.components.length,layers:project.layers.length,status:'planned',planningReadiness:getPlanningReadiness(project),next:store.getRoadmap().nextFocus},null,2)}]};
+      } catch(error) {
+        return {isError:true,content:[{type:'text',text:error instanceof Error ? error.message : String(error)}]};
+      }
+    }
+  );
 
   // Tool 0: Dynamically Scan, Parse AST, and Map Any Arbitrary Codebase
   server.tool(
@@ -162,7 +185,11 @@ export function createBuildViewMcpServer(store: BuildViewStore) {
         .default([]),
     },
     async (args) => {
-      const comp = store.defineComponent({ ...args, gaps: [] });
+      if (args.status === 'completed' || args.progress === 100) {
+        return {isError:true,content:[{type:'text',text:'Create components as planned. Use buildview_update_progress with completion evidence after prerequisites and planning gaps are resolved.'}]};
+      }
+      const existing = store.getProject().components.find(c=>c.id===args.id);
+      const comp = store.defineComponent({ ...args, gaps: existing?.gaps || [] });
       return {
         content: [
           {
@@ -177,7 +204,7 @@ export function createBuildViewMcpServer(store: BuildViewStore) {
   // Tool 3: Update Component Progress & Files Modified
   server.tool(
     'buildview_update_progress',
-    'Update the build progress, status, and modified files for an architectural component in real-time as you code',
+    'Update progress/files. completed or 100 requires an evidence-reference note, no open gaps, and all declared prerequisites completed. A note is a claim, not automatic evidence verification.',
     {
       id: z.string().describe('Component ID to update'),
       progress: z.number().min(0).max(100).optional().describe('New progress percentage (0 - 100)'),
@@ -199,6 +226,17 @@ export function createBuildViewMcpServer(store: BuildViewStore) {
       note: z.string().optional().describe('Log note on what was built or changed in this step'),
     },
     async (args) => {
+      const current = store.getProject().components.find(c=>c.id===args.id);
+      if (!current) return {isError:true,content:[{type:'text',text:`Component ${args.id} not found`}]};
+      if (args.status === 'completed' || args.progress === 100) {
+        const failures: string[] = [];
+        if (!args.note?.trim()) failures.push('Provide a nonempty note referencing actual completion evidence; the note is not automatically verified.');
+        const gaps = current.gaps.filter(g=>!g.resolved);
+        if (gaps.length) failures.push(`Resolve open gaps first: ${gaps.map(g=>g.id).join(', ')}`);
+        const unmet = current.anatomy.callees.filter(id=>store.getProject().components.find(c=>c.id===id)?.status!=='completed');
+        if (unmet.length) failures.push(`Complete declared prerequisites first: ${unmet.join(', ')}`);
+        if (failures.length) return {isError:true,content:[{type:'text',text:failures.join('\n')}]};
+      }
       const comp = store.updateComponentProgress(args);
       if (!comp) {
         return {
@@ -278,10 +316,10 @@ export function createBuildViewMcpServer(store: BuildViewStore) {
   // Tool 6: Get Roadmap & Next Prioritized Layer/Component to Build
   server.tool(
     'buildview_get_roadmap',
-    'Get the execution roadmap: next prioritized layer & component to build, and list of outstanding gaps',
+    'Get prioritized next focus, outstanding gaps, and dependency/planning readiness. Next focus can require planning work; inspect executionReady before implementing.',
     {},
     async () => {
-      const roadmap = store.getRoadmap();
+      const roadmap = {...store.getRoadmap(), planningReadiness:getPlanningReadiness(store.getProject())};
       return {
         content: [
           {
