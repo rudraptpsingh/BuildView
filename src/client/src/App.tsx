@@ -259,7 +259,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen pb-32 flex flex-col transition-colors">
+    <div className={`${viewMode === 'graph' ? 'h-dvh overflow-hidden' : 'min-h-screen pb-32'} flex flex-col transition-colors`}>
       {/* Top Navigation */}
       <Header
         project={project}
@@ -275,7 +275,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Visualizer Container */}
-      <main className="max-w-[1600px] w-full mx-auto px-4 flex-1 space-y-4">
+      <main className={`max-w-[1600px] w-full mx-auto px-4 flex-1 ${viewMode === 'graph' ? `min-h-0 flex flex-col gap-3 pt-3 ${activeMode === 'demo' ? 'pb-32' : 'pb-4'}` : 'space-y-4'}`}>
         {/* AI Agent Roadmap Banner */}
         <RoadmapBanner
           nextFocus={nextFocus}

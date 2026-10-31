@@ -1,34 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import {
-  Layers,
-  Search,
-  Maximize2,
-  Minimize2,
-  CheckCircle2,
-  AlertTriangle,
-  FileCode,
-  TestTube,
-  Trash2,
-  Eye,
-  GitBranch,
-  ArrowRight,
-  Database,
-  Cpu,
-  Terminal,
-  Layout,
-  Plus,
-  Minus,
-  RotateCcw,
-  Move,
-  Filter,
-  Palette,
-} from 'lucide-react';
+import { Search, CheckCircle2, AlertTriangle, TestTube, Trash2, Plus, Minus } from 'lucide-react';
 import { BuildViewProject, ArchitectureComponent } from '@shared/types.js';
 import { LAYER_ACCENTS } from '@shared/tokens.js';
 import dagre from '@dagrejs/dagre';
-import { StatusBadge } from './ui/StatusBadge.js';
-import { TestBadge } from './ui/TestBadge.js';
-import { WasteBadge } from './ui/WasteBadge.js';
 
 interface ArchitectureGraphProps {
   project: BuildViewProject;
@@ -60,7 +34,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
 
   // Canvas Pan & Zoom State
   const [zoom, setZoom] = useState<number>(1.0);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const previousZoom = useRef(1);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const dragStartRef = useRef<{ x: number; y: number; startPanX: number; startPanY: number }>({
     x: 0,
@@ -72,10 +46,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [nodePositions, setNodePositions] = useState<Map<string, CircleNodePosition>>(new Map());
-  const [canvasDimensions, setCanvasDimensions] = useState<{ width: number; height: number }>({
-    width: 1400,
-    height: 900,
-  });
+
 
   // Sort layers foundation-up (order 0, 1, 2, 3, 4)
   const sortedLayers = useMemo(
@@ -124,10 +95,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
 
   // Active focused node (hovered takes precedence, then selected)
   const activeFocusId = hoveredNodeId || selectedComponentId;
-  const activeComponent = useMemo(
-    () => project.components.find((c) => c.id === activeFocusId) || null,
-    [activeFocusId, project.components]
-  );
+
 
   // Map of active relationships for the hovered/selected node
   const relationMap = useMemo(() => {
@@ -207,8 +175,8 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
 
     dagre.layout(g);
 
-    let maxX = 1400;
-    let maxY = 850;
+    let maxX = 600;
+    let maxY = 320;
     const posMap = new Map<string, { x: number; y: number }>();
 
     for (const id of g.nodes()) {
@@ -222,6 +190,14 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
 
     return { posMap, width: maxX, height: maxY };
   }, [filteredComponents, edges, layoutMode, isCompact]);
+
+  const displayedLayers = visibleLayers.filter(layer => selectedLayerFilter === 'all' || layer.id === selectedLayerFilter);
+  const boardWidth = layoutMode === 'columns'
+    ? Math.max(368, displayedLayers.length * 320 + Math.max(0, displayedLayers.length - 1) * 16 + 48)
+    : (dagreLayout?.width || 600) + 48;
+  const boardHeight = layoutMode === 'columns'
+    ? Math.max(280, ...displayedLayers.map(layer => 112 + filteredComponents.filter(c => c.layerId === layer.id).length * (isCompact ? 84 : 96)))
+    : (dagreLayout?.height || 320) + 48;
 
   // Measure rendered circle node centers inside the transform content
   const updateNodePositions = useCallback(() => {
@@ -248,10 +224,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
       }
     }
     setNodePositions(map);
-    setCanvasDimensions({
-      width: Math.max(1400, contentEl.scrollWidth),
-      height: Math.max(850, contentEl.scrollHeight),
-    });
+
   }, [project.components, zoom]);
 
   useEffect(() => {
@@ -267,12 +240,14 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
   // Pan interaction handlers
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('[data-interactive="true"]')) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
     setIsDragging(true);
     dragStartRef.current = {
       x: e.clientX,
       y: e.clientY,
-      startPanX: pan.x,
-      startPanY: pan.y,
+      startPanX: containerRef.current?.scrollLeft || 0,
+      startPanY: containerRef.current?.scrollTop || 0,
     };
   };
 
@@ -280,10 +255,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
     if (!isDragging) return;
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
-    setPan({
-      x: dragStartRef.current.startPanX + dx,
-      y: dragStartRef.current.startPanY + dy,
-    });
+    containerRef.current?.scrollTo(dragStartRef.current.startPanX - dx, dragStartRef.current.startPanY - dy);
   };
 
   const handleMouseUp = () => {
@@ -292,34 +264,27 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
 
   // Zoom controls
   const handleZoomIn = () => setZoom((z) => Math.min(1.8, +(z + 0.15).toFixed(2)));
-  const handleZoomOut = () => setZoom((z) => Math.max(0.6, +(z - 0.15).toFixed(2)));
+  const handleZoomOut = () => setZoom((z) => Math.max(0.25, +(z - 0.15).toFixed(2)));
   const handleResetView = () => {
     setZoom(1.0);
-    setPan({ x: 0, y: 0 });
+    containerRef.current?.scrollTo(0, 0);
   };
 
-  // Layer Icon helper
-  const getLayerIcon = (layerId: string) => {
-    switch (layerId) {
-      case 'layer_0_native_storage':
-      case 'layer_foundation':
-        return <Database className="w-3.5 h-3.5 text-blue-400" />;
-      case 'layer_1_ai_ml':
-      case 'layer_domain':
-        return <Cpu className="w-3.5 h-3.5 text-cyan-400" />;
-      case 'layer_2_ipc_desktop':
-      case 'layer_state_ipc':
-        return <Terminal className="w-3.5 h-3.5 text-amber-400" />;
-      case 'layer_3_studio_ui':
-      case 'layer_presentation':
-        return <Layout className="w-3.5 h-3.5 text-rose-400" />;
-      case 'layer_4_tests':
-      case 'layer_verification':
-        return <TestTube className="w-3.5 h-3.5 text-emerald-400" />;
-      default:
-        return <Layers className="w-3.5 h-3.5" />;
-    }
+  const handleFit = () => {
+    const viewport = containerRef.current;
+    if (!viewport) return;
+    setZoom(Math.max(0.25, Math.min(1, (viewport.clientWidth - 24) / boardWidth, (viewport.clientHeight - 24) / boardHeight)));
+    viewport.scrollTo(0, 0);
   };
+  useEffect(() => {
+    const viewport = containerRef.current;
+    if (viewport && previousZoom.current !== zoom) {
+      const ratio = zoom / previousZoom.current;
+      viewport.scrollLeft = (viewport.scrollLeft + viewport.clientWidth / 2) * ratio - viewport.clientWidth / 2;
+      viewport.scrollTop = (viewport.scrollTop + viewport.clientHeight / 2) * ratio - viewport.clientHeight / 2;
+    }
+    previousZoom.current = zoom;
+  }, [zoom]);
 
   // Reusable Circle Node Renderer (used in both Columns and Dagre layout modes)
   const renderNode = (comp: ArchitectureComponent, customStyle?: React.CSSProperties) => {
@@ -340,7 +305,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
       } else if (relationMap.callees.has(comp.id)) {
         isCallee = true;
       } else {
-        nodeOpacity = 0.2;
+        nodeOpacity = edgeMode === 'focused' ? 0.72 : 1;
       }
     }
 
@@ -351,33 +316,35 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
     else if (effectiveStatus === 'gap_detected') circleBorder = '#f59e0b';
     else if (comp.status === 'completed') circleBorder = '#10b981';
 
-    const circleSize = isCompact ? 'w-10 h-10' : 'w-12 h-12';
+    const circleSize = 'w-7 h-7';
 
     return (
-      <div
+      <button
+        type="button"
+        aria-label={`Inspect ${comp.name}`}
         key={comp.id}
         data-interactive="true"
         onClick={() => onSelectComponent(comp.id)}
         onMouseEnter={() => setHoveredNodeId(comp.id)}
         onMouseLeave={() => setHoveredNodeId(null)}
         style={{ opacity: nodeOpacity, ...customStyle }}
-        className={`group relative flex items-center space-x-3 p-2.5 rounded-xl transition-all duration-200 cursor-pointer ${
+        className={`group relative w-full text-left flex items-start gap-2.5 ${isCompact ? 'p-2' : 'p-3'} rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] transition-colors ${
           isSelected
-            ? 'neu-surface ring-2 ring-blue-500 shadow-md'
+            ? 'ring-2 ring-blue-500'
             : isHovered
-            ? 'neu-surface shadow-xs'
-            : 'hover:bg-[var(--surface-control)]/40'
+            ? 'border-blue-400'
+            : 'hover:border-blue-400'
         }`}
       >
         {/* Circle Node Glyph */}
         <div
           data-circle-node={comp.id}
-          className={`relative shrink-0 rounded-full flex items-center justify-center font-mono font-bold transition-all duration-200 ${circleSize} ${
-            isHovered || isSelected ? 'scale-110 shadow-lg' : 'shadow-xs'
+          className={`relative shrink-0 rounded-md flex items-center justify-center font-mono font-bold transition-all duration-200 ${circleSize} ${
+            isHovered || isSelected ? '' : ''
           }`}
           style={{
             backgroundColor: 'var(--surface-raised)',
-            border: `2.5px solid ${circleBorder}`,
+            border: `1px solid ${circleBorder}`,
           }}
         >
           {isTestHarness ? (
@@ -391,7 +358,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
           {/* Gap Warning Dot (Top-Right) */}
           {effectiveStatus === 'gap_detected' && (
             <span
-              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-xs animate-bounce"
+              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-xs"
               title={`${activeGaps.length} architectural gap detected`}
             >
               <AlertTriangle className="w-2.5 h-2.5" />
@@ -419,189 +386,61 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
         {/* Node Label & Telemetry beside Circle */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center space-x-1.5">
-            <span className="font-bold text-xs text-[var(--text-primary)] truncate group-hover:text-blue-500 transition-colors">
+            <span className="font-semibold text-sm leading-5 text-[var(--text-primary)] line-clamp-2 group-hover:text-blue-600 transition-colors">
               {comp.name}
             </span>
             {isCaller && (
-              <span className="pill green text-[8px] font-mono px-1 py-0 font-bold shrink-0 animate-pulse">
-                CALLER
+              <span className="pill green text-[8px] font-mono px-1 py-0 font-bold shrink-0">
+                Depends on this
               </span>
             )}
             {isCallee && (
-              <span className="pill blue text-[8px] font-mono px-1 py-0 font-bold shrink-0 animate-pulse">
-                CALLEE
+              <span className="pill blue text-[8px] font-mono px-1 py-0 font-bold shrink-0">
+                Required first
               </span>
             )}
           </div>
 
-            <div className="flex items-center space-x-2 text-[10px] font-mono text-[var(--text-tertiary)] mt-0.5">
-              <span className="flex items-center space-x-0.5">
-                <FileCode className="w-2.5 h-2.5" />
-                <span>{comp.files.length}f</span>
-              </span>
-              <span>•</span>
-              <span className="flex items-center space-x-0.5 text-emerald-600 dark:text-emerald-400">
-                <TestTube className="w-2.5 h-2.5" />
-                <span>{comp.testSummary?.totalTests || 0}t</span>
-              </span>
-              <span>•</span>
-              <span className="font-semibold text-[var(--text-primary)]">{comp.progress}%</span>
-              {comp.figmaComponents && comp.figmaComponents.length > 0 && (
-                <>
-                  <span>•</span>
-                  <span
-                    className="flex items-center space-x-0.5 text-purple-400 font-bold"
-                    title={`${comp.figmaComponents.length} Figma design component(s) connected`}
-                  >
-                    <Palette className="w-2.5 h-2.5" />
-                    <span>{comp.figmaComponents.length}</span>
-                  </span>
-                </>
-              )}
+            <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)] mt-1">
+              <span>{effectiveStatus === 'gap_detected' ? `${activeGaps.length} open gaps` : comp.status.replace('_', ' ')}</span>
+              {comp.planning?.acceptanceTests?.length ? <span>· {comp.planning.acceptanceTests.length} planned checks</span> : null}
+              {comp.status === 'in_progress' ? <span>· {comp.progress}%</span> : null}
             </div>
           </div>
-        </div>
+        </button>
       );
     };
 
   return (
-    <div className="flex flex-col space-y-3">
-      {/* Top Filter and Telemetry Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl neu-surface hairline-b">
-        {/* Left: Filter Controls */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Search Box */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search components, files, functions..."
-              className="pl-8 pr-3 py-1 text-xs font-mono rounded neu-well bg-transparent text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none w-48 sm:w-60"
-            />
-          </div>
-
-          {/* Layer Filter Select */}
-          <select
-            value={selectedLayerFilter}
-            onChange={(e) => setSelectedLayerFilter(e.target.value)}
-            className="px-2.5 py-1 text-xs font-mono rounded neu-well bg-transparent text-[var(--text-primary)] border-none focus:outline-none"
-          >
-            <option value="all">ALL LAYERS ({project.layers.length})</option>
-            {project.layers.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name.replace(/^Layer \d+:\s*/, '')}
-              </option>
-            ))}
-          </select>
-
-          {/* Status Quick Filter */}
-          <div className="segmented-tabs font-mono text-[10px]">
-            <button
-              onClick={() => setStatusFilter('all')}
-              className={`segmented-tab ${statusFilter === 'all' ? 'active' : ''}`}
-            >
-              ALL
-            </button>
-            <button
-              onClick={() => setStatusFilter('in_progress')}
-              className={`segmented-tab ${statusFilter === 'in_progress' ? 'active' : ''}`}
-            >
-              BUILDING
-            </button>
-            <button
-              onClick={() => setStatusFilter('gap_detected')}
-              className={`segmented-tab ${statusFilter === 'gap_detected' ? 'active' : ''}`}
-            >
-              GAPS
-            </button>
-            <button
-              onClick={() => setStatusFilter('prune')}
-              className={`segmented-tab ${statusFilter === 'prune' ? 'active' : ''}`}
-            >
-              PRUNE
-            </button>
-          </div>
+    <div className="flex flex-1 min-h-0 flex-col gap-3">
+      <div className="shrink-0 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] p-3">
+        <div className="relative flex-1 min-w-44 max-w-72">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" />
+          <input aria-label="Search components" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search components…" className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-[var(--border-default)] bg-transparent" />
         </div>
-
-        {/* Right: Layout Switcher, Edge Mode, Test Toggle & Zoom Controls */}
-        <div className="flex items-center space-x-2 font-mono text-xs">
-          {/* Layout Mode Selector: Columns vs Dagre Hierarchical */}
-          <div className="segmented-tabs text-[10px]">
-            <button
-              onClick={() => setLayoutMode('columns')}
-              className={`segmented-tab ${layoutMode === 'columns' ? 'active' : ''}`}
-              title="Architectural Layer Swimlanes"
-            >
-              <Layout className="w-3 h-3" />
-              <span>COLUMNS</span>
-            </button>
-            <button
-              onClick={() => setLayoutMode('dagre')}
-              className={`segmented-tab ${layoutMode === 'dagre' ? 'active' : ''}`}
-              title="Hierarchical Sugiyama DAG Layout (Dagre Open-Source Engine)"
-            >
-              <GitBranch className="w-3 h-3" />
-              <span>DAGRE DAG</span>
-            </button>
-          </div>
-
-          {/* Test Layer Toggle */}
-          <button
-            onClick={() => setShowTestLayer(!showTestLayer)}
-            className={`action-btn text-[10px] font-mono flex items-center space-x-1.5 px-2.5 py-1 transition-all ${
-              showTestLayer
-                ? 'text-emerald-400 border border-emerald-500/40 bg-emerald-500/10'
-                : 'text-[var(--text-tertiary)]'
-            }`}
-            title="Toggle Verification & Test Harness Layer (Layer 4)"
-          >
-            <TestTube className="w-3 h-3" />
-            <span>TESTS {showTestLayer ? 'ON' : 'OFF'}</span>
-          </button>
-
-          {/* Edge Mode: Focused vs All Edges */}
-          <div className="segmented-tabs text-[10px]">
-            <button
-              onClick={() => setEdgeMode('focused')}
-              className={`segmented-tab ${edgeMode === 'focused' ? 'active' : ''}`}
-              title="Spotlight dependencies on hover"
-            >
-              <Eye className="w-3 h-3" />
-              <span>FOCUSED</span>
-            </button>
-            <button
-              onClick={() => setEdgeMode('all')}
-              className={`segmented-tab ${edgeMode === 'all' ? 'active' : ''}`}
-              title="Show all architectural dependency lines"
-            >
-              <GitBranch className="w-3 h-3" />
-              <span>ALL EDGES</span>
-            </button>
-          </div>
-
-          {/* Compact Density Toggle */}
-          <button
-            onClick={() => setIsCompact(!isCompact)}
-            className="action-btn text-xs"
-            title={isCompact ? 'Standard Density' : 'Compact Density'}
-          >
-            {isCompact ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
-          </button>
-
-          {/* Zoom Buttons */}
-          <div className="action-group">
-            <button onClick={handleZoomOut} className="action-btn p-1" title="Zoom Out">
-              <Minus className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={handleResetView} className="action-btn px-2 text-[10px]" title="Reset to 100%">
-              {Math.round(zoom * 100)}%
-            </button>
-            <button onClick={handleZoomIn} className="action-btn p-1" title="Zoom In">
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-          </div>
+        <select aria-label="Filter layers" value={selectedLayerFilter} onChange={e=>setSelectedLayerFilter(e.target.value)} className="max-w-64 rounded-md border border-[var(--border-default)] bg-transparent p-2 text-sm">
+          <option value="all">All layers</option>
+          {project.layers.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+        <select aria-label="Filter status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value as typeof statusFilter)} className="rounded-md border border-[var(--border-default)] bg-transparent p-2 text-sm">
+          <option value="all">All statuses</option><option value="in_progress">In progress</option><option value="gap_detected">Open gaps</option><option value="prune">Prune candidates</option>
+        </select>
+        <div className="segmented-tabs text-xs">
+          <button aria-pressed={layoutMode==='columns'} onClick={()=>{setLayoutMode('columns');containerRef.current?.scrollTo(0,0);}} className={`segmented-tab ${layoutMode==='columns'?'active':''}`}>Layers</button>
+          <button aria-pressed={layoutMode==='dagre'} onClick={()=>{setLayoutMode('dagre');containerRef.current?.scrollTo(0,0);}} className={`segmented-tab ${layoutMode==='dagre'?'active':''}`}>Graph</button>
+        </div>
+        <div className="flex items-center gap-1 ml-auto">
+          <button onClick={handleZoomOut} className="action-btn" aria-label="Zoom out"><Minus className="w-4 h-4" /></button>
+          <button onClick={handleResetView} className="action-btn text-xs min-w-12" aria-label="Reset zoom">{Math.round(zoom*100)}%</button>
+          <button onClick={handleZoomIn} className="action-btn" aria-label="Zoom in"><Plus className="w-4 h-4" /></button>
+          <button onClick={handleFit} className="action-btn text-xs">Fit</button>
+          <details className="relative">
+            <summary className="action-btn text-xs cursor-pointer">Options</summary>
+            <div className="absolute right-0 top-full z-40 min-w-52 p-3 space-y-3 rounded-lg border border-[var(--border-default)] bg-[var(--surface-raised)] shadow-lg">
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={edgeMode==='all'} onChange={e=>setEdgeMode(e.target.checked?'all':'focused')} />All connections</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={isCompact} onChange={e=>setIsCompact(e.target.checked)} />Compact rows</label>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -612,31 +451,24 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        className={`relative w-full h-[calc(100vh-140px)] min-h-[680px] overflow-hidden rounded-2xl neu-well canvas-dot-grid border border-[var(--border-default)] select-none ${
-          isDragging ? 'cursor-grabbing' : 'cursor-grab'
-        }`}
+        role="region"
+        aria-label="Architecture workflow"
+        tabIndex={0}
+        className={`relative w-full flex-1 min-h-0 overflow-auto rounded-lg border border-[var(--border-default)] bg-[var(--surface-window)] ${isDragging ? 'cursor-grabbing' : ''}`}
+        style={{scrollbarGutter:'stable'}}
       >
-        {/* Transformable Graph Canvas (Pans and Zooms Smoothly) */}
+        <div data-testid="workflow-scroll-bounds" style={{width:boardWidth*zoom,height:boardHeight*zoom,position:'relative'}}>
         <div
           ref={contentRef}
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: 'top left',
-            transition: isDragging ? 'none' : 'transform 0.1s cubic-bezier(0.16, 1, 0.3, 1)',
-            width: `${canvasDimensions.width}px`,
-            minHeight: `${canvasDimensions.height}px`,
-            position: 'absolute',
-            top: 0,
-            left: 0,
-          }}
-          className="p-8"
+          style={{transform:`scale(${zoom})`,transformOrigin:'top left',width:boardWidth,height:boardHeight,position:'absolute',top:0,left:0}}
+          className="p-6"
         >
           {/* Dynamic SVG Directed Edges Layer */}
           <svg
             className="absolute left-0 top-0 pointer-events-none z-0"
             style={{
-              width: `${canvasDimensions.width}px`,
-              height: `${canvasDimensions.height}px`,
+              width: `${boardWidth}px`,
+              height: `${boardHeight}px`,
             }}
           >
             <defs>
@@ -683,7 +515,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
               const isRelevant = isCallerEdge || isCalleeEdge;
 
               // In focused mode: only display edges related to active hovered/selected node
-              if (edgeMode === 'focused' && isFocusActive && !isRelevant) {
+              if (edgeMode === 'focused' && (!isFocusActive || !isRelevant)) {
                 return null;
               }
 
@@ -764,33 +596,28 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
           {layoutMode === 'columns' ? (
             /* Dedicated Layer Track Columns (Dynamic 4 or 5 columns) */
             <div
-              className="relative z-10 grid gap-6"
+              className="relative z-10 grid gap-4"
               style={{
-                gridTemplateColumns: `repeat(${visibleLayers.length}, minmax(280px, 1fr))`,
-                minWidth: `${Math.max(1200, visibleLayers.length * 300)}px`,
+                gridTemplateColumns: `repeat(${displayedLayers.length}, 320px)`,
+                alignItems: 'start',
               }}
             >
-              {visibleLayers.map((layer) => {
+              {displayedLayers.map((layer) => {
                 const compsInLayer = filteredComponents.filter((c) => c.layerId === layer.id);
 
                 return (
                   <div
                     key={layer.id}
-                    className="flex flex-col space-y-4 rounded-2xl p-4 bg-[var(--surface-window)]/75 border border-[var(--border-subtle)] shadow-xs"
+                    className="min-w-0 flex flex-col gap-3"
                   >
                     {/* Minimal Column Header */}
-                    <div className="flex items-center justify-between pb-3 hairline-b">
+                    <div className="flex items-center justify-between gap-3 pb-3 border-b border-[var(--border-default)]">
                       <div className="flex items-center space-x-2">
-                        <div className="p-1 rounded-md bg-[var(--surface-control)]">
-                          {getLayerIcon(layer.id)}
-                        </div>
                         <div>
-                          <h3 className="text-xs font-bold font-mono tracking-tight text-[var(--text-primary)] uppercase">
+                          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
                             {layer.name.replace(/^Layer \d+:\s*/, '')}
                           </h3>
-                          <p className="text-[10px] text-[var(--text-tertiary)] font-mono line-clamp-1">
-                            {layer.description}
-                          </p>
+
                         </div>
                       </div>
                       <span className="pill neutral text-[10px] font-mono shrink-0">
@@ -799,7 +626,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
                     </div>
 
                     {/* Circle Nodes Rail */}
-                    <div className="flex flex-col space-y-3.5">
+                    <div className="flex flex-col gap-3">
                       {compsInLayer.map((comp) => renderNode(comp))}
 
                       {compsInLayer.length === 0 && (
@@ -819,7 +646,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
               style={{
                 width: `${dagreLayout?.width || 1400}px`,
                 height: `${dagreLayout?.height || 850}px`,
-                minHeight: '800px',
+                minHeight: '280px',
               }}
             >
               {filteredComponents.map((comp) => {
@@ -838,91 +665,7 @@ export const ArchitectureGraph: React.FC<ArchitectureGraphProps> = ({
             </div>
           )}
         </div>
-
-        {/* Floating Docked Active Inspector Card at Bottom-Right */}
-        {activeComponent && (
-          <div
-            data-interactive="true"
-            className="absolute bottom-5 right-6 z-30 max-w-lg w-full p-4 rounded-xl neu-surface hairline-t shadow-2xl backdrop-blur-md bg-[var(--surface-window)]/95 border border-[var(--border-default)] animate-in fade-in slide-in-from-bottom-2"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center space-x-3">
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center font-mono font-bold text-xs shadow-xs shrink-0"
-                  style={{
-                    backgroundColor: 'var(--surface-raised)',
-                    border: `2.5px solid ${
-                      activeComponent.gaps.some((g) => !g.resolved)
-                        ? '#f59e0b'
-                        : activeComponent.status === 'completed'
-                        ? '#10b981'
-                        : '#3b82f6'
-                    }`,
-                  }}
-                >
-                  P{activeComponent.priority}
-                </div>
-
-                <div>
-                  <div className="flex items-center space-x-2 font-mono text-xs">
-                    <span className="font-bold text-sm text-[var(--text-primary)]">
-                      {activeComponent.name}
-                    </span>
-                    <StatusBadge
-                      status={activeComponent.gaps.some((g) => !g.resolved) ? 'gap_detected' : activeComponent.status}
-                      gapCount={activeComponent.gaps.filter((g) => !g.resolved).length}
-                    />
-                  </div>
-                  <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 line-clamp-1">
-                    {activeComponent.description}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => onSelectComponent(activeComponent.id)}
-                className="action-btn text-xs font-mono font-bold px-2.5 py-1 text-blue-500 shrink-0 flex items-center space-x-1"
-              >
-                <span>DETAILS</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
-            </div>
-
-            {/* Figma Design Connection if present */}
-            {activeComponent.figmaComponents && activeComponent.figmaComponents.length > 0 && (
-              <div className="mt-2.5 flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/30 text-[10px] font-mono text-purple-300">
-                <div className="flex items-center space-x-1.5 truncate mr-2">
-                  <Palette className="w-3 h-3 text-purple-400 shrink-0" />
-                  <span className="font-bold text-purple-400">Figma Design:</span>
-                  <span className="truncate text-[var(--text-secondary)]">
-                    {activeComponent.figmaComponents.map((f) => f.name).slice(0, 3).join(', ')}
-                    {activeComponent.figmaComponents.length > 3 ? ` +${activeComponent.figmaComponents.length - 3} more` : ''}
-                  </span>
-                </div>
-                <span className="pill purple text-[9px] font-bold shrink-0">
-                  {activeComponent.figmaComponents.length} MAPPED
-                </span>
-              </div>
-            )}
-
-            {/* Quick Metrics Bar */}
-            <div className="mt-3 pt-2.5 hairline-t flex flex-wrap items-center justify-between text-[10px] font-mono text-[var(--text-tertiary)]">
-              <div className="flex items-center space-x-2">
-                <span>{activeComponent.files.length} files</span>
-                <span>•</span>
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                  {activeComponent.testSummary?.totalTests || 0} tests
-                </span>
-                <span>•</span>
-                <span>{activeComponent.astMetrics?.linesOfCode || 0} LOC</span>
-              </div>
-
-              <div className="flex items-center space-x-1.5">
-                <WasteBadge wasteMetrics={activeComponent.wasteMetrics} />
-              </div>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
